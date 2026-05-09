@@ -52,6 +52,23 @@ Xem `migrations/001_init_example.sql` làm template.
 - Realtime: `subscribeToTable(table, workspaceId, cb)` → trả về unsubscribe. Gọi khi unmount.
 - Queue: `enqueue(jobType, payload)` → nhận `jobId`, dùng `onJob(jobId, cb)` để chờ kết quả.
 
+### Design system (default — KHÔNG ép buộc)
+- `src/lib/theme.css` auto-import qua `main.jsx` → mọi mini-app có sẵn brand Mushy: palette, font Be Vietnam Pro, shadow clay, utility classes.
+- Tokens: CSS variables `--brand` `#E63946`, `--bg` `#FFF7F8`, `--ink` `#0F0F12`, `--r-card` `28px`, `--r-button` `999px` (pill), `--shadow-card`, `--shadow-button`, ... (xem file đầy đủ).
+- Utility classes:
+  - **Layout**: `.mushy-page` (max 720, padding center)
+  - **Card**: `.mushy-card` (clay rounded + shadow + highlight top)
+  - **Section**: `.mushy-section-title`, `.mushy-section-sub`
+  - **Button**: `.mushy-btn` + `--primary` (gradient đỏ) / `--ghost` (white) / `--dashed` (viền đứt). Thêm `--block` để full width.
+  - **Input**: `.mushy-input` + `.mushy-label`. Thêm `--error` cho error state.
+  - **Status pill**: `.mushy-status` + `--ok` / `--warn` / `--err` + child `.mushy-status-dot`.
+  - **Code**: `.mushy-code` (dark JSON block).
+  - **Spinner**: `.mushy-spinner`.
+- JS tokens: `import { colors, radii, fonts } from './lib/theme.js'` khi cần dynamic style.
+- **Tự do override** — đè class CSS riêng hoặc thay tokens trong `:root` của App.css cho app-specific. Mục tiêu là consistent với superapp shell, không ép.
+
+Xem `src/App.jsx` (demo) để biết cách kết hợp `mushy-*` classes với class app-specific.
+
 ---
 
 ## Layout
@@ -60,8 +77,11 @@ Xem `migrations/001_init_example.sql` làm template.
 miniapp-template/
 ├── src/
 │   ├── App.jsx               ← UI mini-app (sửa file này khi build)
-│   ├── main.jsx
+│   ├── App.css               ← style app-specific
+│   ├── main.jsx              ← import theme.css + render
 │   └── lib/
+│       ├── theme.css         ← Mushy design system (tokens + utility classes)
+│       ├── theme.js          ← JS export tokens (cho inline style)
 │       ├── context.js        ← getContext(), isInShell()
 │       ├── bridge.js         ← callNative() + mocks
 │       ├── supabase.js       ← getSupabase(), db proxy (đã scope schema)

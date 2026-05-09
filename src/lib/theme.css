@@ -1,0 +1,225 @@
+/* =====================================================================
+ * Mushy design system — default cho mọi mini-app.
+ *
+ * Auto-imported bởi main.jsx → mọi mini-app có:
+ *   1. CSS variables (--brand, --bg, --r-card, --shadow-card, ...)
+ *   2. Base typography + body background
+ *   3. Utility component classes (.mushy-card, .mushy-btn, ...)
+ *
+ * KHÔNG ép buộc — bạn có thể override hoặc dùng class riêng. Nhưng dùng
+ * default này để mini-app trông consistent với superapp shell.
+ * ===================================================================== */
+
+:root {
+  /* === Brand colors === */
+  --brand: #E63946;            /* đỏ cap nấm — primary */
+  --brand-pressed: #C92A39;
+  --brand-soft: #FFE4E7;
+  --pink: #FF6B81;
+  --pink-soft: #FFB3C1;
+
+  /* === Neutrals === */
+  --ink: #0F0F12;              /* heading, đậm nhất */
+  --text: #1A1A1F;
+  --muted: #6B6770;
+  --hairline: rgba(15, 15, 18, 0.08);
+
+  /* === Surfaces === */
+  --bg: #FFF7F8;               /* nền KHÔNG pure white */
+  --surface: #FFFFFF;
+  --surface-muted: #FBEEF0;
+
+  /* === Status === */
+  --success: #10B981;
+  --warn: #F59E0B;
+  --danger: #E63946;
+
+  /* === Radii === */
+  --r-card: 28px;
+  --r-button: 999px;           /* pill */
+  --r-input: 999px;            /* pill */
+  --r-tile: 18px;
+
+  /* === Shadows (clay) === */
+  --shadow-card: 0 8px 24px rgba(15, 15, 18, 0.06), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  --shadow-button: 0 6px 16px rgba(201, 42, 57, 0.32);
+
+  /* === Fonts === */
+  --font-body: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  color-scheme: light;
+}
+
+/* === Base === */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background:
+    radial-gradient(circle at 12% -8%, var(--pink-soft) 0, transparent 35%),
+    radial-gradient(circle at 110% 12%, var(--brand-soft) 0, transparent 38%),
+    var(--bg);
+  background-attachment: fixed;
+  min-height: 100dvh;
+}
+
+#root { min-height: 100dvh; }
+
+button { font-family: inherit; }
+input, textarea, select { font-family: inherit; font-size: inherit; }
+
+/* === Layout === */
+.mushy-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 18px 80px;
+}
+
+/* === Card (clay) === */
+.mushy-card {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+  border-top: 1px solid rgba(255, 255, 255, 0.9);
+}
+.mushy-card + .mushy-card { margin-top: 14px; }
+
+/* === Section title === */
+.mushy-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 10px;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mushy-section-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: -6px 0 12px;
+}
+
+/* === Button base === */
+.mushy-btn {
+  appearance: none;
+  border: none;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  padding: 14px 22px;
+  border-radius: var(--r-button);
+  transition: transform 100ms ease, box-shadow 200ms ease, opacity 200ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+}
+.mushy-btn:active { transform: scale(0.96); }
+.mushy-btn[disabled] { opacity: 0.55; cursor: not-allowed; transform: none; }
+.mushy-btn--block { display: flex; width: 100%; }
+
+.mushy-btn--primary {
+  background: linear-gradient(180deg, #FF5A6A 0%, var(--brand) 100%);
+  color: #fff;
+  box-shadow: var(--shadow-button);
+}
+.mushy-btn--primary:active { box-shadow: 0 2px 6px rgba(201, 42, 57, 0.2); }
+
+.mushy-btn--ghost {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+}
+
+.mushy-btn--dashed {
+  background: transparent;
+  color: var(--brand);
+  border: 1.5px dashed var(--brand);
+}
+
+/* === Input === */
+.mushy-label {
+  display: block;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+  margin: 0 0 6px 14px;
+}
+.mushy-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1.5px solid var(--hairline);
+  border-radius: var(--r-input);
+  padding: 14px 18px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 150ms ease;
+}
+.mushy-input::placeholder { color: var(--muted); }
+.mushy-input:focus { border-color: var(--brand); }
+.mushy-input--error { border-color: var(--danger); }
+
+/* === Status pill === */
+.mushy-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-button);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.mushy-status-dot { width: 6px; height: 6px; border-radius: 50%; }
+.mushy-status--ok { background: rgba(16, 185, 129, 0.12); color: #047857; }
+.mushy-status--ok .mushy-status-dot { background: var(--success); }
+.mushy-status--warn { background: rgba(245, 158, 11, 0.14); color: #92400E; }
+.mushy-status--warn .mushy-status-dot { background: var(--warn); }
+.mushy-status--err { background: rgba(230, 57, 70, 0.12); color: var(--danger); }
+.mushy-status--err .mushy-status-dot { background: var(--danger); }
+
+/* === Code block === */
+.mushy-code {
+  background: #0E1116;
+  color: #e6edf3;
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* === Animations === */
+@keyframes mushy-spin { to { transform: rotate(360deg); } }
+.mushy-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: mushy-spin 0.6s linear infinite;
+  display: inline-block;
+}

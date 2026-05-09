@@ -1,68 +1,6 @@
-/* Mushy mini-app — claymorphism theme khớp với superapp shell. */
+/* App-specific styles. Tokens + utility classes (.mushy-*) đã lo bởi lib/theme.css. */
 
-:root {
-  --brand: #E63946;
-  --brand-pressed: #C92A39;
-  --brand-soft: #FFE4E7;
-  --pink: #FF6B81;
-  --pink-soft: #FFB3C1;
-  --ink: #0F0F12;
-  --text: #1A1A1F;
-  --muted: #6B6770;
-  --hairline: rgba(15, 15, 18, 0.08);
-  --bg: #FFF7F8;
-  --surface: #FFFFFF;
-  --surface-muted: #FBEEF0;
-  --success: #10B981;
-  --warn: #F59E0B;
-  --danger: #E63946;
-
-  --r-card: 28px;
-  --r-button: 999px;
-  --r-input: 999px;
-  --r-tile: 18px;
-
-  --shadow-card: 0 8px 24px rgba(15, 15, 18, 0.06), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
-  --shadow-button: 0 6px 16px rgba(201, 42, 57, 0.32);
-
-  --font-body: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-
-  color-scheme: light;
-}
-
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  background:
-    radial-gradient(circle at 12% -8%, var(--pink-soft) 0, transparent 35%),
-    radial-gradient(circle at 110% 12%, var(--brand-soft) 0, transparent 38%),
-    var(--bg);
-  background-attachment: fixed;
-  min-height: 100dvh;
-}
-
-#root { min-height: 100dvh; }
-
-.page {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 20px 18px 80px;
-}
-
-/* Header */
+/* Hero */
 .hero {
   display: flex;
   align-items: center;
@@ -88,51 +26,6 @@ body {
   font-size: 13px;
 }
 
-/* Status pill */
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--r-button);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-}
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-.status.ok { background: rgba(16, 185, 129, 0.12); color: #047857; }
-.status.ok .status-dot { background: #10B981; }
-.status.mock { background: rgba(245, 158, 11, 0.14); color: #92400E; }
-.status.mock .status-dot { background: #F59E0B; }
-
-/* Cards */
-.card {
-  background: var(--surface);
-  border-radius: var(--r-card);
-  padding: 18px;
-  box-shadow: var(--shadow-card);
-  border-top: 1px solid rgba(255, 255, 255, 0.9);
-  margin-top: 14px;
-}
-.card-title {
-  font-size: 16px;
-  font-weight: 700;
-  margin: 0 0 10px;
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.card-sub {
-  font-size: 13px;
-  color: var(--muted);
-  margin: -6px 0 12px;
-}
-
 /* Bridge tests grid */
 .btn-grid {
   display: grid;
@@ -140,63 +33,14 @@ body {
   gap: 10px;
 }
 .btn-tile {
-  appearance: none;
-  border: none;
-  background: linear-gradient(180deg, #FF5A6A 0%, var(--brand) 100%);
-  color: #fff;
-  padding: 14px 12px;
-  border-radius: 18px;
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.2px;
-  cursor: pointer;
-  box-shadow: var(--shadow-button);
-  transition: transform 100ms ease, box-shadow 200ms ease;
-  display: flex;
+  /* extend .mushy-btn via class composition trong JSX */
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  padding: 14px 12px;
   min-height: 88px;
-  justify-content: center;
+  border-radius: var(--r-tile);
+  font-size: 14px;
 }
-.btn-tile:active {
-  transform: scale(0.96);
-  box-shadow: 0 2px 6px rgba(201, 42, 57, 0.2);
-}
-.btn-tile[disabled] {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-.btn-tile-icon {
-  font-size: 22px;
-  line-height: 1;
-}
-.btn-tile-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Code / context block */
-.code {
-  background: #0E1116;
-  color: #e6edf3;
-  border-radius: 16px;
-  padding: 14px 16px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.55;
-  overflow-x: auto;
-  white-space: pre;
-  margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-}
+.btn-tile-icon { font-size: 22px; line-height: 1; }
 
 /* Logs */
 .log-empty {
@@ -229,9 +73,7 @@ body {
   font-size: 13px;
   margin-bottom: 4px;
 }
-.log-label .dot {
-  width: 6px; height: 6px; border-radius: 50%;
-}
+.log-label .dot { width: 6px; height: 6px; border-radius: 50%; }
 .log-label.ok { color: var(--success); }
 .log-label.ok .dot { background: var(--success); }
 .log-label.err { color: var(--danger); }
