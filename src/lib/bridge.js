@@ -7,7 +7,11 @@
 
 import { isInShell } from './context.js';
 
-const TIMEOUT_MS = 10_000;
+// Timeout mặc định: 10s cho op nhanh, 5 phút cho op tương tác (camera, file picker)
+// vì user có thể loay hoay tay rất lâu. Override qua opts.timeout nếu cần.
+const DEFAULT_TIMEOUT_MS = 10_000;
+const INTERACTIVE_TIMEOUT_MS = 5 * 60_000;
+const INTERACTIVE_TYPES = new Set(['OPEN_CAMERA', 'PICK_FILE']);
 const pending = new Map();
 let nextId = 1;
 
@@ -22,15 +26,18 @@ if (typeof window !== 'undefined') {
   };
 }
 
-export function callNative(type, payload = {}) {
+export function callNative(type, payload = {}, opts = {}) {
   if (!isInShell()) return mock(type, payload);
+
+  const timeoutMs =
+    opts.timeout ?? (INTERACTIVE_TYPES.has(type) ? INTERACTIVE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
 
   const id = nextId++;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error(`Bridge timeout: ${type}`));
-    }, TIMEOUT_MS);
+    }, timeoutMs);
     pending.set(id, { resolve, reject, timer });
     window.ReactNativeWebView.postMessage(JSON.stringify({ id, type, payload }));
   });
