@@ -1,6 +1,12 @@
 // File storage abstraction.
-// DEV: Supabase Storage (bucket per workspace).
-// PROD: Cloudflare R2 (private) — qua Edge Function presigned URL.
+//
+// Default: Supabase Storage (bucket `miniapp-dev`). Đủ cho dev, Vercel
+// preview, và prod khi chưa cần R2.
+//
+// R2: opt-in qua env `VITE_USE_R2=true`. Khi bật, upload + view đi qua
+// Edge Functions `storage-upload` / `storage-view` (cần deploy 2 functions
+// đó vào Supabase, kèm R2 credentials trong env). Đây là path cho prod
+// thật khi traffic file lớn / muốn bandwidth rẻ hơn Supabase Storage.
 //
 // Mini-app KHÔNG nên biết đang dùng cái nào. Lưu `object_key` vào DB,
 // không bao giờ lưu URL trực tiếp (URL có thời hạn).
@@ -8,7 +14,7 @@
 import { getContext } from './context.js';
 import { getSupabase } from './supabase.js';
 
-const isDev = import.meta.env.DEV;
+const useR2 = import.meta.env.VITE_USE_R2 === 'true';
 const slug = import.meta.env.VITE_APP_SLUG || 'demo';
 const BUCKET = 'miniapp-dev';
 
@@ -19,12 +25,12 @@ export async function upload(file, folder = 'uploads') {
   const ext = (file.name || 'bin').split('.').pop();
   const objectKey = `${ctx.workspaceId}/app_${slug}/${folder}/${cryptoUuid()}.${ext}`;
 
-  if (isDev) {
+  if (!useR2) {
     const { error } = await getSupabase().storage.from(BUCKET).upload(objectKey, file);
     if (error) throw error;
     return objectKey;
   }
-  // PROD: gọi Edge Function `storage-upload` để lấy presigned PUT URL
+  // R2: gọi Edge Function `storage-upload` để lấy presigned PUT URL
   const sb = getSupabase();
   const { data, error } = await sb.functions.invoke('storage-upload', {
     body: { objectKey, contentType: file.type },
@@ -44,7 +50,7 @@ export async function getViewUrl(objectKey) {
   if (cached && cached.expiresAt > Date.now()) return cached.url;
 
   let url;
-  if (isDev) {
+  if (!useR2) {
     const { data, error } = await getSupabase()
       .storage.from(BUCKET)
       .createSignedUrl(objectKey, 3600);
