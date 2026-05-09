@@ -143,23 +143,32 @@ miniapp-template/
 
 **Quy ước branch (Mushy):** `main` = production (canonical, stable). `dev` = development/preview. Standard Git flow — `main` luôn deploy được.
 
+⚠️ **Vercel Free plan**: custom domain CHỈ gắn được vào production deployment, KHÔNG gắn được vào preview. Nên:
+- **Prod** (`main` branch): custom domain `{slug}.mini.mushy-app.com`
+- **Dev** (`dev` branch): URL auto của Vercel `<project-name>.vercel.app` (vd `mushy-miniapp-notes.vercel.app`)
+
+Lên Pro plan ($20/tháng/member) mới mở được preview custom domain. Hiện tại Free đủ cho team nội bộ.
+
 **Lúc đầu (chưa tách dev/prod, chỉ có main):**
-- `git push origin main` → Vercel auto Preview URL `*.vercel.app`
+- `git push origin main` → Vercel auto build → URL `<project>.vercel.app` (production deployment)
 - Set Vercel env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (dev project) + server-side `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, AI key
-- Admin Portal (admin-dev.mini.mushy-app.com): đăng ký app, set preview URL, apply migration qua Reviewer, enable cho workspace dev
+- Admin Portal (preview): đăng ký app, set preview URL = Vercel `<project>.vercel.app`, apply migration qua Reviewer, enable cho workspace dev
 
 **Khi stable + sẵn sàng tách dev/prod:**
 1. Tạo Supabase project prod riêng → apply tất cả migration từ đầu
 2. `git branch dev main && git push -u origin dev` (copy main sang dev, giữ history)
-3. Vercel Settings → Domains:
-   - `{slug}.mini.mushy-app.com` → assign branch `main` (production)
-   - `{slug}-dev.mini.mushy-app.com` → assign branch `dev` (preview)
+3. (Tuỳ chọn) Reset main về placeholder static (`index.html` "Coming Soon" + `vercel.json` `{ "framework": null }`) cho đến khi sẵn sàng ship code thật. Tag commit cũ trước khi reset (`pre-prod-stub-YYYYMMDD`) để recover.
+4. Vercel Settings → Domains:
+   - Add `{slug}.mini.mushy-app.com` → assign Git Branch = `main` (production)
+   - **KHÔNG add dev domain** (Free plan không cho — dev cứ dùng URL `*.vercel.app`)
    - Production Branch giữ default = `main`
-4. Vercel Environment Variables — cùng KEY name, scope khác nhau:
+5. Vercel Settings → Deployment Protection: tắt (`None`) để team access `*.vercel.app` preview không cần auth gate
+6. Vercel Environment Variables — cùng KEY name, scope khác nhau:
    - **Production**: prod Supabase URL + key + service role + AI prod key
    - **Preview**: dev Supabase URL + key + service role + AI dev key
-5. Admin Portal **prod** (admin.mini.mushy-app.com): đăng ký app, set prod URL `{slug}.mini.mushy-app.com`, apply migration qua Reviewer prod, enable cho workspace prod
-6. Workflow sau đó: code trên `dev` → test admin-dev — khi ổn, PR/merge `dev → main` → auto deploy prod
+7. Cloudflare DNS: add CNAME `{slug}.mini` → `cname.vercel-dns.com` (DNS only, no proxy). KHÔNG add `{slug}-dev.mini` (không dùng).
+8. Admin Portal **prod** (admin.mini.mushy-app.com): đăng ký app, set prod URL `{slug}.mini.mushy-app.com`, apply migration qua Reviewer prod, enable cho workspace prod
+9. Workflow sau đó: code trên `dev` → test ở `<project>.vercel.app` — khi ổn, PR/merge `dev → main` → auto deploy prod custom domain
 
 ⚠️ **KHÔNG share Supabase project giữa dev và prod**. User auth tách biệt giữa 2 project — đó là feature.
 
