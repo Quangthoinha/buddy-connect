@@ -146,7 +146,7 @@ miniapp-template/
 **Lúc đầu (chưa tách dev/prod, chỉ có main):**
 - `git push origin main` → Vercel auto Preview URL `*.vercel.app`
 - Set Vercel env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (dev project) + server-side `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, AI key
-- Admin Portal (admin-dev.mushy-app.com): đăng ký app, set preview URL, apply migration qua Reviewer, enable cho workspace dev
+- Admin Portal (admin-dev.mini.mushy-app.com): đăng ký app, set preview URL, apply migration qua Reviewer, enable cho workspace dev
 
 **Khi stable + sẵn sàng tách dev/prod:**
 1. Tạo Supabase project prod riêng → apply tất cả migration từ đầu
@@ -158,7 +158,7 @@ miniapp-template/
 4. Vercel Environment Variables — cùng KEY name, scope khác nhau:
    - **Production**: prod Supabase URL + key + service role + AI prod key
    - **Preview**: dev Supabase URL + key + service role + AI dev key
-5. Admin Portal **prod** (admin.mushy-app.com): đăng ký app, set prod URL `{slug}.mini.mushy-app.com`, apply migration qua Reviewer prod, enable cho workspace prod
+5. Admin Portal **prod** (admin.mini.mushy-app.com): đăng ký app, set prod URL `{slug}.mini.mushy-app.com`, apply migration qua Reviewer prod, enable cho workspace prod
 6. Workflow sau đó: code trên `dev` → test admin-dev — khi ổn, PR/merge `dev → main` → auto deploy prod
 
 ⚠️ **KHÔNG share Supabase project giữa dev và prod**. User auth tách biệt giữa 2 project — đó là feature.
