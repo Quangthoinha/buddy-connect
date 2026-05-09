@@ -1,69 +1,123 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getContext, isInShell } from './lib/context.js';
 import { callNative } from './lib/bridge.js';
+import './App.css';
 
-const styles = {
-  page: { fontFamily: 'system-ui, -apple-system, sans-serif', maxWidth: 720, margin: '0 auto', padding: 16, lineHeight: 1.5 },
-  h1: { fontSize: 22, marginBottom: 4 },
-  sub: { color: '#666', marginTop: 0 },
-  card: { border: '1px solid #e5e5e5', borderRadius: 8, padding: 12, marginTop: 16, background: '#fafafa' },
-  pre: { background: '#0e1116', color: '#e6edf3', padding: 12, borderRadius: 6, fontSize: 12, overflowX: 'auto' },
-  row: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 },
-  btn: { padding: '8px 12px', border: '1px solid #ccc', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 14 },
-  badge: (ok) => ({ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 12, background: ok ? '#dcfce7' : '#fef3c7', color: ok ? '#166534' : '#92400e' }),
-};
+// Định nghĩa 4 nút bridge — icon emoji là OK ở đây (nội dung minh hoạ),
+// production app nên dùng SVG icon set thống nhất.
+const BRIDGE_TESTS = [
+  { type: 'GET_LOCATION',     label: 'Vị trí',       icon: '📍' },
+  { type: 'OPEN_CAMERA',      label: 'Camera',       icon: '📷', payload: { quality: 0.8 } },
+  { type: 'PICK_FILE',        label: 'Chọn file',    icon: '📎' },
+  { type: 'PUSH_NOTIFICATION', label: 'Thông báo',   icon: '🔔', payload: { title: 'Mushy', body: 'Xin chào từ mini-app 🍄' } },
+];
 
 export default function App() {
   const [ctx, setCtx] = useState(null);
-  const [error, setError] = useState(null);
+  const [ctxError, setCtxError] = useState(null);
   const [logs, setLogs] = useState([]);
+  const [pending, setPending] = useState(null);
 
   useEffect(() => {
-    try { setCtx(getContext()); } catch (e) { setError(e.message); }
+    try { setCtx(getContext()); }
+    catch (e) { setCtxError(e.message); }
   }, []);
 
-  const log = (label, data) =>
-    setLogs((l) => [{ t: new Date().toLocaleTimeString(), label, data }, ...l].slice(0, 10));
+  const inShell = useMemo(() => isInShell(), []);
+
+  const log = (label, data, ok = true) =>
+    setLogs((l) => [{ t: nowHHmmss(), label, data, ok }, ...l].slice(0, 20));
 
   const test = (type, payload) => async () => {
-    try { log(type, await callNative(type, payload)); }
-    catch (e) { log(type + ' [error]', e.message); }
+    if (pending) return;
+    setPending(type);
+    try {
+      const data = await callNative(type, payload);
+      log(type, data, true);
+    } catch (e) {
+      log(type, e.message || String(e), false);
+    } finally {
+      setPending(null);
+    }
   };
 
   return (
-    <div style={styles.page}>
-      <h1 style={styles.h1}>Mini-app Template</h1>
-      <p style={styles.sub}>
-        Hello world + bridge test page.{' '}
-        <span style={styles.badge(isInShell())}>{isInShell() ? 'In Shell' : 'Browser (mock)'}</span>
-      </p>
-
-      <div style={styles.card}>
-        <strong>App Context</strong>
-        {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
-        {ctx && <pre style={styles.pre}>{JSON.stringify(ctx, null, 2)}</pre>}
-      </div>
-
-      <div style={styles.card}>
-        <strong>Bridge tests</strong>
-        <div style={styles.row}>
-          <button style={styles.btn} onClick={test('GET_LOCATION')}>GET_LOCATION</button>
-          <button style={styles.btn} onClick={test('OPEN_CAMERA', { quality: 0.8 })}>OPEN_CAMERA</button>
-          <button style={styles.btn} onClick={test('PICK_FILE')}>PICK_FILE</button>
-          <button style={styles.btn} onClick={test('PUSH_NOTIFICATION', { title: 'Hi', body: 'từ mini-app' })}>PUSH_NOTIFICATION</button>
+    <div className="page">
+      <header className="hero">
+        <img src="/mushy.png" alt="Mushy mascot" className="hero-mascot" />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 className="hero-title">Mushy Demo</h1>
+          <p className="hero-sub">Trang thử nghiệm bridge & ngữ cảnh</p>
         </div>
-      </div>
+        <span className={`status ${inShell ? 'ok' : 'mock'}`}>
+          <span className="status-dot" />
+          {inShell ? 'Trong Shell' : 'Trình duyệt (mock)'}
+        </span>
+      </header>
 
-      <div style={styles.card}>
-        <strong>Logs</strong>
-        {logs.length === 0 && <p style={{ color: '#888' }}>Chưa có log nào.</p>}
-        {logs.map((l, i) => (
-          <div key={i} style={{ marginTop: 6 }}>
-            <code style={{ color: '#666' }}>{l.t}</code> <strong>{l.label}</strong>
-            <pre style={styles.pre}>{typeof l.data === 'string' ? l.data : JSON.stringify(l.data, null, 2)}</pre>
+      <section className="card">
+        <h2 className="card-title">🧪 Thử nghiệm Bridge</h2>
+        <p className="card-sub">
+          Bấm để gọi native API qua <code>callNative</code>. Trong Shell sẽ chạy thật, ngoài browser dùng mock.
+        </p>
+        <div className="btn-grid">
+          {BRIDGE_TESTS.map((b) => (
+            <button
+              key={b.type}
+              className="btn-tile"
+              disabled={!!pending}
+              onClick={test(b.type, b.payload)}
+            >
+              {pending === b.type ? (
+                <span className="btn-tile-spinner" />
+              ) : (
+                <span className="btn-tile-icon">{b.icon}</span>
+              )}
+              <span>{b.label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2 className="card-title">📋 Nhật ký</h2>
+        {logs.length === 0 ? (
+          <p className="log-empty">Chưa có log. Bấm thử 1 nút ở trên nhé!</p>
+        ) : (
+          <div>
+            {logs.map((l, i) => (
+              <div key={i} className="log-item">
+                <span className="log-time">{l.t}</span>
+                <div className="log-body">
+                  <div className={`log-label ${l.ok ? 'ok' : 'err'}`}>
+                    <span className="dot" />
+                    {l.label} {l.ok ? '· OK' : '· Lỗi'}
+                  </div>
+                  <pre className="log-data">
+                    {typeof l.data === 'string' ? l.data : JSON.stringify(l.data, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        )}
+      </section>
+
+      <section className="card">
+        <h2 className="card-title">🔑 Ngữ cảnh ứng dụng</h2>
+        {ctxError && <p className="log-empty" style={{ color: 'var(--danger)' }}>{ctxError}</p>}
+        {ctx && <pre className="code">{JSON.stringify(ctx, null, 2)}</pre>}
+      </section>
+
+      <footer className="footer">
+        Mushy mini-app demo · Made with <span className="heart">♥</span>
+      </footer>
     </div>
   );
+}
+
+function nowHHmmss() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
