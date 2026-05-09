@@ -178,6 +178,16 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 .mushy-input:focus { border-color: var(--brand); }
 .mushy-input--error { border-color: var(--danger); }
 
+/* textarea: --r-input pill 999 sẽ làm textarea oval. Override radius rounded. */
+textarea.mushy-input,
+textarea.mushy-input:focus {
+  border-radius: 16px;
+  padding: 12px 14px;
+  line-height: 1.5;
+  min-height: 120px;
+  resize: vertical;
+}
+
 /* === Status pill === */
 .mushy-status {
   display: inline-flex;
@@ -222,4 +232,82 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   border-radius: 50%;
   animation: mushy-spin 0.6s linear infinite;
   display: inline-block;
+}
+
+/* === Modal + Dialog (dùng với src/components/Dialog.jsx — DialogProvider) === */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 15, 18, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.modal-card {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  padding: 24px;
+  max-width: 420px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-card);
+  border-top: 1px solid rgba(255, 255, 255, 0.9);
+}
+.dialog-scrim { animation: dialog-fade 160ms ease-out; }
+.dialog-card {
+  max-width: 380px;
+  text-align: center;
+  animation: dialog-pop 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.dialog-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin: 0 auto 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+.dialog-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.dialog-body {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.dialog-card .form-actions { margin-top: 20px; }
+
+/* Danger button variant — đỏ filled, dùng cho confirm xoá/destructive */
+.mushy-btn--danger {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(230, 57, 70, 0.28);
+}
+.mushy-btn--danger:hover { background: var(--brand-pressed); }
+.mushy-btn--danger:active { transform: translateY(1px); }
+
+@keyframes dialog-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes dialog-pop {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
 }

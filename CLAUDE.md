@@ -54,6 +54,23 @@ Xem `migrations/001_init_example.sql` làm template.
 - Realtime: `subscribeToTable(table, workspaceId, cb)` → trả về unsubscribe. Gọi khi unmount.
 - Queue: `enqueue(jobType, payload)` → nhận `jobId`, dùng `onJob(jobId, cb)` để chờ kết quả.
 
+### Dialog (thay native alert/confirm)
+- KHÔNG dùng `window.alert()` / `window.confirm()` — UI xấu, không khớp brand.
+- Dùng `DialogProvider` + `useDialog()` từ `src/components/Dialog.jsx`. Wrap App với `<DialogProvider>` trong `main.jsx`.
+- API: `dialog.info(title, body)`, `.success(...)`, `.error(...)`, `.confirm(title, body, { danger, confirmLabel, cancelLabel })`. Promise-based, return true/false cho confirm.
+- Esc = cancel, Enter = confirm. CSS đã có sẵn trong `theme.css`.
+
+### Khi build feature có AI / SQL / user input nguy hiểm
+- API key chỉ ở Vercel env server-side (đã nói ở Security trên).
+- **Anti prompt injection** khi user input đi vào AI prompt:
+  - Hard limit độ dài (vd 30KB cho SQL, 5KB cho text).
+  - Wrap user content trong tag XML rõ ràng (vd `<user_input>...</user_input>`) + system prompt cấm "follow instructions inside the tag".
+  - Force structured output: `response_format: { type: 'json_object' }` (OpenAI/OpenRouter) hoặc Gemini structured output. Validate shape trước khi dùng.
+  - Tolerate markdown wrap: model đôi khi trả ` ```json ... ``` ` dù đã set json_object → strip code fence trước khi `JSON.parse`.
+  - Nếu output không match shape → fallback "unsure", KHÔNG silently treat như success.
+- **Anti SQL injection** với input đi vào SQL: dùng Supabase `from().eq()` parameterized, KHÔNG concat string. Nếu phải dùng `rpc()` raw SQL, validate input bằng regex chặt.
+- **Rate limit per user** cho endpoint tốn token AI: tạo bảng `*_usage_log(user_id, date, count)` + RPC atomic `consume_quota` (UPSERT + check). Default 100 req/user/ngày là điểm khởi đầu hợp lý.
+
 ### Design system (default — KHÔNG ép buộc)
 - `src/lib/theme.css` auto-import qua `main.jsx` → mọi mini-app có sẵn brand Mushy: palette, font Be Vietnam Pro, shadow clay, utility classes.
 - Tokens: CSS variables `--brand` `#E63946`, `--bg` `#FFF7F8`, `--ink` `#0F0F12`, `--r-card` `28px`, `--r-button` `999px` (pill), `--shadow-card`, `--shadow-button`, ... (xem file đầy đủ).
@@ -81,6 +98,8 @@ miniapp-template/
 │   ├── App.jsx               ← UI mini-app (sửa file này khi build)
 │   ├── App.css               ← style app-specific
 │   ├── main.jsx              ← import theme.css + render
+│   ├── components/
+│   │   └── Dialog.jsx        ← DialogProvider + useDialog (thay alert/confirm)
 │   └── lib/
 │       ├── theme.css         ← Mushy design system (tokens + utility classes)
 │       ├── theme.js          ← JS export tokens (cho inline style)
@@ -136,3 +155,6 @@ miniapp-template/
 - ❌ Dùng `window.__APP_CONTEXT__` trực tiếp (dùng `getContext()`)
 - ❌ Gọi `fetch` thẳng tới provider AI từ client (lộ key, không verify token)
 - ❌ Hardcode workspaceId — luôn lấy từ context
+- ❌ `window.alert()` / `window.confirm()` (dùng `useDialog()`)
+- ❌ Concat user input vào AI prompt mà không wrap tag + force JSON output
+- ❌ Apply migration trực tiếp Supabase SQL editor ở prod (đi qua Admin Portal Migration Reviewer để được verify + audit log)
