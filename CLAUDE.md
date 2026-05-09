@@ -27,6 +27,8 @@ Một **mini-app** trong hệ Mushy Super App. Mini-app:
 - File: lưu `object_key`, không bao giờ lưu URL
 - Tiền: `bigint` (đơn vị nhỏ nhất). ID: `uuid`. Thời gian: `timestamptz`.
 
+⚠️ **Mọi query phải có `.eq('workspace_id', ctx.workspaceId)`**. RLS chỉ chặn cross-user (user khác không thấy data của bạn), KHÔNG chặn cross-workspace của cùng user. User là member của nhiều workspace → RLS cho thấy hết → query phải scope tay theo `getContext().workspaceId`. Áp dụng cho `select`, `update`, `delete`. `insert` thì set `workspace_id: ctx.workspaceId` trong row.
+
 Xem `migrations/001_init_example.sql` làm template.
 
 ### Security
