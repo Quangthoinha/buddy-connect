@@ -279,7 +279,6 @@ textarea.mushy-input:focus {
 
 .mushy-select-panel {
   position: absolute;
-  top: calc(100% + 6px);
   left: 0;
   right: 0;
   background: var(--surface);
@@ -292,11 +291,26 @@ textarea.mushy-input:focus {
   max-height: 320px;
   overflow-y: auto;
   z-index: 100;
-  animation: select-pop 140ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-@keyframes select-pop {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
+.mushy-select-panel--down {
+  top: calc(100% + 6px);
+  bottom: auto;
+  transform-origin: top center;
+  animation: select-pop-down 140ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mushy-select-panel--up {
+  top: auto;
+  bottom: calc(100% + 6px);
+  transform-origin: bottom center;
+  animation: select-pop-up 140ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes select-pop-down {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes select-pop-up {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .mushy-select-option {
   display: flex;

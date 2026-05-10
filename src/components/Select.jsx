@@ -12,10 +12,15 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
+const PANEL_MAX_H = 320;
+const PANEL_GAP = 6;
+
 export default function Select({ value, onChange, options, placeholder = '— Chọn —', disabled = false }) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
+  const [direction, setDirection] = useState('down');  // 'down' | 'up'
   const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
 
   const selected = options.find((o) => o.value === value);
 
@@ -27,6 +32,29 @@ export default function Select({ value, onChange, options, placeholder = '— Ch
     }
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  // Tính direction (down/up) khi mở dropdown — dựa vào space available trong viewport
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    function recalc() {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom - PANEL_GAP;
+      const spaceAbove = rect.top - PANEL_GAP;
+      // Flip up nếu space dưới chật và trên rộng hơn
+      if (spaceBelow < PANEL_MAX_H && spaceAbove > spaceBelow) {
+        setDirection('up');
+      } else {
+        setDirection('down');
+      }
+    }
+    recalc();
+    window.addEventListener('resize', recalc);
+    window.addEventListener('scroll', recalc, true);  // capture để bắt scroll bên trong container
+    return () => {
+      window.removeEventListener('resize', recalc);
+      window.removeEventListener('scroll', recalc, true);
+    };
   }, [open]);
 
   // Esc đóng + arrow/Enter navigate
@@ -62,6 +90,7 @@ export default function Select({ value, onChange, options, placeholder = '— Ch
   return (
     <div className="mushy-select" ref={wrapRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={`mushy-select-trigger ${open ? 'mushy-select-trigger--open' : ''}`}
         onClick={() => !disabled && setOpen((v) => !v)}
@@ -81,7 +110,7 @@ export default function Select({ value, onChange, options, placeholder = '— Ch
       </button>
 
       {open && (
-        <ul className="mushy-select-panel" role="listbox">
+        <ul className={`mushy-select-panel mushy-select-panel--${direction}`} role="listbox">
           {options.length === 0 ? (
             <li className="mushy-select-empty">Không có lựa chọn</li>
           ) : options.map((opt, i) => (
