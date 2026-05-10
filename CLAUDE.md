@@ -43,28 +43,22 @@ KHÔNG đổi slug sau khi đã có data.
 
 ---
 
-## 2. Kiến trúc dev/prod (Zalo-style — single Supabase)
-
-Mushy chạy **1 Supabase + 1 superapp build** — KHÔNG tách 2 Supabase. Mini-app dev/prod khác biệt qua:
+## 2. Môi trường dev / prod
 
 ### 2.1 Schema namespace
-- `app_{slug}`     → production schema (hit khi VITE_APP_ENV=prod, frontend deploy ở `{slug}.mini.mushy-app.com`)
-- `app_{slug}_dev` → dev sandbox schema (hit khi VITE_APP_ENV=dev, frontend deploy ở `*.vercel.app`)
+- `app_{slug}`     → production (hit khi `VITE_APP_ENV=prod`, frontend deploy ở `{slug}.mini.mushy-app.com`)
+- `app_{slug}_dev` → dev sandbox (hit khi `VITE_APP_ENV=dev`, frontend deploy ở `*.vercel.app`)
 
-User auth + workspaces dùng chung 1 DB → đăng nhập 1 lần, real account ở mọi mode (Zalo Mini App pattern).
+User auth + workspaces dùng chung 1 DB → đăng nhập 1 lần, real account ở mọi mode.
 
 ### 2.2 Vercel branch + env
-- Branch `main`  → Vercel **Production** scope → custom domain `{slug}.mini.mushy-app.com` → `VITE_APP_ENV=prod`
-- Branch `dev`   → Vercel **Preview** scope → URL auto `<project>.vercel.app` → `VITE_APP_ENV=dev`
+- Branch `main` → Vercel **Production** → custom domain `{slug}.mini.mushy-app.com` → `VITE_APP_ENV=prod`
+- Branch `dev`  → Vercel **Preview** → URL auto `<project>.vercel.app` → `VITE_APP_ENV=dev`
 
-⚠️ **Vercel Free plan**: custom domain CHỈ gắn vào production deployment. Preview phải dùng `*.vercel.app`.
+⚠️ **Vercel Free plan**: custom domain CHỈ gắn vào production. Preview phải dùng `*.vercel.app`.
 
-### 2.3 dev_mode flag (user-level)
-- Trong superapp, user bật toggle `dev_mode` trong settings
-- Khi bật: superapp load **preview_url** (dev Vercel URL) **CHỈ cho mini-app mà user là owner**
-- Mini-app khác (user không own) → vẫn load prod URL dù bật dev_mode
-
-→ Mỗi developer chỉ thấy WIP của riêng mình, không ảnh hưởng đồng nghiệp.
+### 2.3 dev_mode (read-only context)
+Mini-app đọc `ctx.userDevMode` + `ctx.isAppOwner` từ `getContext()`. Khi cả 2 = true, user đang xem preview build của app — có thể hiện badge `🛠 DEV` riêng nếu cần. Mặc định không bắt buộc làm gì.
 
 ---
 
@@ -329,18 +323,16 @@ Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo inv
 1. Viết SQL trong `migrations/00X_xxx.sql` (chỉ ref `app_{slug}`, KHÔNG viết tay `_dev`)
 2. Mở Admin Portal → tab **Migrations** → chọn mini-app của bạn
 3. Nhập version (vd `002_add_notes`) + paste SQL
-4. **Submit & AI Review** → 3-tier defense:
-   - Tầng 1: regex deterministic checks (RLS, workspace_id, schema scope...)
-   - Tầng 2: Gemini 2.5 Flash AI review (Anti-injection wrap)
-   - Tầng 3: RPC re-check pattern khi apply
-5. Verdict:
+4. **Submit & AI Review** — verdict:
    - **PASS** → auto-apply atomic cho cả `app_{slug}` + `app_{slug}_dev`
-   - **REJECT** → đọc reasons, sửa SQL, submit lại version mới
-   - **UNSURE** → audit log nhưng không apply, sửa + submit lại
-6. Quota: 100 review/user/ngày (consume_ai_quota RPC enforce)
-7. Audit log lưu trong `public.schema_migrations` (owner workspace đọc được)
+   - **REJECT** → đọc reasons, sửa SQL, submit lại (cùng version OK — Reviewer cho re-submit)
+   - **UNSURE** → audit log, không apply; sửa + submit lại
+5. Quota: 100 review/user/ngày
+6. Audit log lưu trong `public.schema_migrations` (owner workspace đọc được)
 
-ℹ️ **Schema `app_{slug}` + `app_{slug}_dev` được Admin Portal auto-tạo + auto-expose qua Management API** ngay khi đăng ký mini-app (giống Cloudflare DNS, Storage bucket). Migration đầu tiên chỉ cần tập trung tables/RLS/triggers — KHÔNG cần `create schema` hay GRANT/default privileges, KHÔNG cần thao tác tay trên Supabase Dashboard.
+⚠️ **SQL phải idempotent** — dùng `create table if not exists`, `drop policy if exists`, `create or replace function` … Reviewer cho re-submit cùng version sau fix → migration phải chạy lại an toàn.
+
+ℹ️ **Schema `app_{slug}` + `app_{slug}_dev` được Admin Portal auto-tạo + auto-expose** ngay khi đăng ký mini-app (giống Cloudflare DNS, Storage bucket). Migration đầu tiên chỉ cần tables/RLS/triggers — KHÔNG cần `create schema` hay GRANT/default privileges.
 
 ### 8.5 Hàng ngày
 - JWT hết hạn sau 1 giờ → `npm run dev:token` để refresh
@@ -351,12 +343,6 @@ Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo inv
 - App mới đăng ký = Private (chỉ owner thấy + chỉ owner enable cho ws họ là owner)
 - Khi ổn → vào admin → Sửa app → đổi sang **Public** (mọi ws thấy, ws owner enable cho ws của họ)
 - KHÔNG có "Tắt globally" — nếu cần tắt: chuyển về Private + disable per-workspace, hoặc set status='disabled' qua SQL Editor (rare)
-
-### 8.7 dev_mode badge (UX của mini-app)
-
-Mini-app có thể đọc `ctx.userDevMode` + `ctx.isAppOwner` từ `getContext()`:
-- `userDevMode=true && isAppOwner=true` → user đang xem dev preview của app mình → hiện badge `🛠 DEV` ở UI riêng nếu cần
-- Mặc định superapp đã hiện amber header + badge khi devMode active, mini-app không bắt buộc làm thêm
 
 ---
 
