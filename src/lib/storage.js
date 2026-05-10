@@ -1,7 +1,7 @@
 // File storage abstraction.
 //
-// Default: Supabase Storage. Bucket name = `miniapp-{slug}` (auto từ VITE_APP_SLUG).
-// Bucket được tạo qua migration của mini-app — xem `migrations/00X.sql` mẫu.
+// Default: Supabase Storage. Bucket name = `miniapp-{slug}` (slug từ mushy.config.json).
+// Bucket auto-tạo bởi Admin Portal khi register app — mini-app KHÔNG viết SQL touching storage.
 //
 // R2: opt-in qua env `VITE_USE_R2=true`. Khi bật, upload + view đi qua
 // Edge Functions `storage-upload` / `storage-view` (cần deploy 2 functions

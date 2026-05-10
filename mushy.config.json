@@ -1,8 +1,5 @@
 {
-  "_comment_1": "Mushy mini-app config — committed to repo.",
-  "_comment_2": "URL + anon key là PUBLIC (Supabase design intent — same Stripe publishable key, Firebase API key). Bundled vào JS lúc build, ai mở DevTools đều thấy. RLS chặn read data nhạy cảm.",
-  "_comment_3": "Service role key NEVER vào file này — chỉ ở Vercel env server-side cho api/_verify.js + api/*-proxy.js.",
-  "_comment_4": "BƯỚC ĐẦU TIÊN khi clone template: thay 'slug' bên dưới bằng slug được Mushy admin cấp (vd 'expense', 'crm', 'notes'...). Slug 3-41 ký tự [a-z0-9-], unique trong catalog Mushy.",
+  "_comment": "BƯỚC ĐẦU TIÊN khi clone template: thay 'slug' bên dưới bằng slug được Mushy admin cấp (vd 'expense', 'crm', 'notes'). 3-41 ký tự [a-z0-9-], unique trong catalog.",
 
   "slug": "REPLACE_WITH_YOUR_SLUG",
 

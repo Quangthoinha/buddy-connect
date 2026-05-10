@@ -159,6 +159,7 @@ Xem `migrations/001_init_example.sql` làm template chi tiết.
 
 **Component sẵn có** (`src/components/`):
 - `Dialog.jsx` — `DialogProvider` + `useDialog()`. Wrap App với `<DialogProvider>` (đã có trong `main.jsx`).
+- `Select.jsx` — custom dropdown thay native `<select>` (KHÔNG được dùng `<select>` HTML — break design system). API: `<Select value onChange options={[{value, label, icon?}]} placeholder />`. Click ngoài + Esc đóng, keyboard nav (Up/Down/Enter).
 
 ### Dialog API (THAY native alert/confirm)
 
@@ -271,7 +272,7 @@ npm run dev             # localhost:5173 (browser, có bridge mock)
 ### 8.1.1 `npm run dev:setup` — flow auto-config local DEV
 
 Script tự động:
-1. **Hỏi email + password** Supabase (account của bạn — nếu chưa có thì admin Mushy invite bạn vào workspace nào đó trước qua superapp/admin portal)
+1. **Hỏi email + password** Mushy (đăng ký + tạo workspace trên app Mushy trước nếu chưa có — xem 8.1.3)
 2. **Login** qua Supabase Auth → lấy JWT access token (1h expiry)
 3. **List workspace** bạn là member → bạn chọn 1
 4. **Auto ghi 4 biến** vào `.env`:
@@ -291,7 +292,7 @@ npm run dev:token       # login lại + update VITE_DEV_TOKEN
 Workspace/user/role không đổi nên chỉ cần refresh token.
 
 ### 8.1.3 Không có account?
-Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo invite`), bạn click link → signup → tự động join workspace.
+Cài app **Mushy** (TestFlight iOS / Play Internal Android) → mở app → **Đăng ký** → tạo workspace mới. Email + password đó dùng cho `npm run dev:setup`.
 
 ### 8.2 Đăng ký mini-app vào catalog Mushy (1 lần per app)
 
@@ -312,7 +313,7 @@ Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo inv
 
    | Alias | Branch cần gán | Bước thao tác |
    |---|---|---|
-   | `<project>.vercel.app` (auto-gán bởi Vercel) | **dev** (Preview) | Click row → Edit → **Git Branch: `dev`** → Save. Mặc định Vercel gán Production — phải đổi tay. Đây là URL preview_url sẽ paste vào admin portal ở bước 7. |
+   | `<project>.vercel.app` (auto-gán bởi Vercel) | **dev** (Preview) | Click row → Edit → **Git Branch: `dev`** → Save. Mặc định Vercel gán Production — phải đổi tay. Đây là URL preview_url sẽ paste vào admin portal ở bước 6. |
    | `{slug}.mini.mushy-app.com` (custom domain prod) | **main** (Production) | Add domain → assign Git Branch = `main` → Save. Đợi DNS verify (CNAME đã được admin portal auto-tạo ở bước 7). |
 
    ⚠️ **Bước này chết người nếu sai.** Mặc định Vercel để `<project>.vercel.app` cho Production branch — nếu không đổi sang `dev`, bật dev_mode trong superapp vẫn load build production → query schema prod → **toàn bộ tách dev/prod vô nghĩa**.
@@ -377,7 +378,8 @@ Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo inv
 - ❌ Hardcode workspaceId — luôn `getContext().workspaceId`
 
 ### Frontend
-- ❌ `window.alert()` / `window.confirm()` — dùng `useDialog()`
+- ❌ `window.alert()` / `window.confirm()` / `window.prompt()` — dùng `useDialog()`
+- ❌ Native `<select>` HTML — dùng component `Select` từ `src/components/Select.jsx`
 - ❌ `window.__APP_CONTEXT__` trực tiếp — dùng `getContext()`
 - ❌ Hardcode domain — dùng env hoặc `window.location.origin`
 
