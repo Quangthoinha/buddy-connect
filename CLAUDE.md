@@ -340,7 +340,7 @@ Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo inv
 6. Quota: 100 review/user/ngày (consume_ai_quota RPC enforce)
 7. Audit log lưu trong `public.schema_migrations` (owner workspace đọc được)
 
-⚠️ **Sau migration ĐẦU TIÊN của mỗi mini-app** (1 lần): vào Supabase Dashboard → **Settings → API → Exposed schemas** → thêm `app_{slug}, app_{slug}_dev` vào list. Mặc định Supabase chỉ expose `public, graphql_public` → client báo "Invalid schema" nếu thiếu. Khi tạo migration sau cho cùng mini-app thì không cần làm lại.
+ℹ️ **Schema `app_{slug}` + `app_{slug}_dev` được Admin Portal auto-tạo + auto-expose qua Management API** ngay khi đăng ký mini-app (giống Cloudflare DNS, Storage bucket). Migration đầu tiên chỉ cần tập trung tables/RLS/triggers — KHÔNG cần `create schema` hay GRANT/default privileges, KHÔNG cần thao tác tay trên Supabase Dashboard.
 
 ### 8.5 Hàng ngày
 - JWT hết hạn sau 1 giờ → `npm run dev:token` để refresh

@@ -2,12 +2,14 @@
 -- Migration mẫu cho mini-app.
 -- Đổi `demo` thành slug thật của bạn TRƯỚC KHI SUBMIT qua Migration Reviewer.
 --
+-- Schema `app_{slug}` đã được Admin Portal auto-tạo khi register mini-app
+-- (cùng grants + default privileges). Migration KHÔNG cần CREATE SCHEMA
+-- hay GRANT — chỉ tập trung vào tables, indexes, RLS policies, triggers.
+--
 -- Migration Reviewer auto duplicate file này sang schema sandbox (suffix
--- _dev) khi apply atomic — chỉ viết cho schema chính, KHÔNG viết tay
--- schema sandbox (Reviewer regex check sẽ reject).
+-- _dev) khi apply atomic — chỉ viết cho schema chính.
 --
 -- Checklist (Migration Reviewer sẽ verify):
---   [x] Schema riêng `app_{slug}`, không dùng `public`
 --   [x] Mọi table có `workspace_id uuid not null`
 --   [x] Foreign key `workspace_id` → `public.workspaces` ON DELETE CASCADE
 --   [x] Index trên `workspace_id`
@@ -18,18 +20,6 @@
 --   [x] File: lưu `object_key`, không lưu URL
 --   [x] Trigger updated_at nếu có cột này
 -- =====================================================================
-
-create schema if not exists app_demo;
-
--- Cấp quyền cho role `authenticated` dùng schema + table mới sau này.
--- (Schema riêng không tự inherit từ public, phải GRANT tay.)
-grant usage on schema app_demo to authenticated;
-alter default privileges in schema app_demo
-  grant select, insert, update, delete on tables to authenticated;
-alter default privileges in schema app_demo
-  grant usage, select on sequences to authenticated;
-alter default privileges in schema app_demo
-  grant execute on functions to authenticated;
 
 -- ---------- Bảng tasks (ví dụ) ----------
 create table if not exists app_demo.tasks (
@@ -45,7 +35,9 @@ create table if not exists app_demo.tasks (
 create index if not exists idx_tasks_workspace      on app_demo.tasks (workspace_id);
 create index if not exists idx_tasks_workspace_time on app_demo.tasks (workspace_id, created_at desc);
 
--- GRANT cho table đã tạo (default privileges chỉ áp dụng cho table TƯƠNG LAI)
+-- GRANT cho table cụ thể (default privileges chỉ áp dụng cho table TƯƠNG LAI
+-- nếu chạy default privileges TRƯỚC khi tạo table — vì admin auto setup chạy
+-- trước, default sẽ apply cho table này. Nhưng explicit grant cho an tâm.)
 grant select, insert, update, delete on app_demo.tasks to authenticated;
 
 alter table app_demo.tasks enable row level security;
