@@ -31,6 +31,10 @@ export function DialogProvider({ children }) {
       info:    (title, body) => show({ title, body, variant: 'info' }),
       success: (title, body) => show({ title, body, variant: 'success' }),
       error:   (title, body) => show({ title, body, variant: 'error' }),
+      // confirm — opts:
+      //   { danger, confirmLabel, cancelLabel,
+      //     requireType: string  // bắt user gõ chuỗi này để enable confirm
+      //   }
       confirm: (title, body, opts = {}) =>
         show({
           title,
@@ -39,6 +43,7 @@ export function DialogProvider({ children }) {
           primaryLabel: opts.confirmLabel ?? 'Đồng ý',
           secondaryLabel: opts.cancelLabel ?? 'Huỷ',
           danger: !!opts.danger,
+          requireType: opts.requireType,
         }),
     }),
     [show]
@@ -53,15 +58,19 @@ export function DialogProvider({ children }) {
 }
 
 function DialogView({ config, close }) {
-  // Esc đóng dialog (cancel = false)
+  const [typed, setTyped] = useState('');
+  const requireType = config.requireType;
+  const canConfirm = !requireType || typed === requireType;
+
+  // Esc đóng dialog (cancel). Enter chỉ confirm khi không yêu cầu type-to-confirm.
   useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape') close(false);
-      else if (e.key === 'Enter') close(true);
+      else if (e.key === 'Enter' && canConfirm && !requireType) close(true);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [close]);
+  }, [close, canConfirm, requireType]);
 
   const accent =
     config.variant === 'success' ? 'var(--success)'
@@ -72,6 +81,9 @@ function DialogView({ config, close }) {
     config.variant === 'success' ? '✓'
     : config.variant === 'error' ? '✕'
     : 'i';
+
+  // Body có thể là string hoặc React node. String → <p> với pre-wrap. Node → div bọc.
+  const isStringBody = typeof config.body === 'string';
 
   return (
     <div className="modal-scrim dialog-scrim" onClick={() => close(false)}>
@@ -85,7 +97,25 @@ function DialogView({ config, close }) {
         </div>
 
         {config.title && <h3 className="dialog-title">{config.title}</h3>}
-        {config.body && <p className="dialog-body">{config.body}</p>}
+        {config.body && (isStringBody
+          ? <p className="dialog-body">{config.body}</p>
+          : <div className="dialog-body dialog-body--rich">{config.body}</div>
+        )}
+
+        {requireType && (
+          <div style={{ marginTop: 12 }}>
+            <input
+              className={`mushy-input ${typed && !canConfirm ? 'mushy-input--error' : ''}`}
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={`Gõ "${requireType}" để xác nhận`}
+              spellCheck={false}
+              autoCapitalize="off"
+              autoComplete="off"
+            />
+          </div>
+        )}
 
         <div className="form-actions">
           {config.secondaryLabel && (
@@ -93,7 +123,7 @@ function DialogView({ config, close }) {
               className="mushy-btn mushy-btn--ghost"
               onClick={() => close(false)}
               style={{ flex: 1 }}
-              autoFocus
+              autoFocus={!requireType}
             >
               {config.secondaryLabel}
             </button>
@@ -102,7 +132,8 @@ function DialogView({ config, close }) {
             className={`mushy-btn ${config.danger ? 'mushy-btn--danger' : 'mushy-btn--primary'}`}
             onClick={() => close(true)}
             style={{ flex: 1 }}
-            autoFocus={!config.secondaryLabel}
+            disabled={!canConfirm}
+            autoFocus={!config.secondaryLabel && !requireType}
           >
             {config.primaryLabel}
           </button>
