@@ -54,6 +54,7 @@ User auth + workspaces dùng chung 1 DB → đăng nhập 1 lần, real account 
 - **Schema duy nhất**: `app_{slug}`. KHÔNG bao giờ tạo table trong `public`/`auth`/`storage`
 - **KHÔNG viết tay** `app_{slug}_dev` trong migration file. Migration Reviewer auto duplicate cả 2 schema (atomic apply).
 - File migration trong `migrations/00X_xxx.sql` chỉ viết `app_{slug}.tablename` — Reviewer regex-replace whole-word khi apply lần 2 cho dev schema.
+- **KHÔNG viết SQL nào touch schema `storage`** (bucket, objects, policies). Reviewer chặn hết. Bucket + RLS auto-tạo bởi Admin Portal khi register app — giống Cloudflare DNS auto-create.
 
 ### 3.2 Mọi table phải có
 ```sql
@@ -133,7 +134,7 @@ Xem `migrations/001_init_example.sql` làm template chi tiết.
 | `context.js` | `getContext()`, `isInShell()` | Lấy `{ token, userId, workspaceId, workspaceSlug, role, userDevMode, isAppOwner }` |
 | `supabase.js` | `db`, `dbPublic`, `getSupabase()`, `getPublicSupabase()` | `db` scoped vào `app_{slug}` (theo VITE_APP_ENV → có thể là `_dev`); `dbPublic` cho public.* (hiếm dùng) |
 | `bridge.js` | `callNative('TYPE', payload)` | Gọi native: `GET_LOCATION` / `OPEN_CAMERA` / `PICK_FILE` / `PUSH_NOTIFICATION`. Promise, timeout 10s. Mock tự bật khi không có Shell. |
-| `storage.js` | `upload(file, folder)`, `getViewUrl(objectKey)` | DEV: Supabase Storage bucket `miniapp-{slug}`. PROD R2: opt-in qua `VITE_USE_R2=true`. Path `{workspace_id}/{folder}/{uuid}.{ext}`. Lưu `object_key` vào DB. |
+| `storage.js` | `upload(file, folder)`, `getViewUrl(objectKey)` | Bucket `miniapp-{slug}` **auto-tạo bởi Admin Portal khi register app** (giống DNS). Mini-app dev KHÔNG viết storage SQL. Path: `{ws_id}/[dev/]{folder}/{uuid}.{ext}` (dev có prefix `dev/` để dễ wipe). Lưu `object_key` vào DB. R2 opt-in qua `VITE_USE_R2=true`. |
 | `realtime.js` | `subscribeToTable(table, workspaceId, cb)`, `subscribeBroadcast()` | Trả unsubscribe — gọi khi unmount! |
 | `queue.js` | `enqueue(jobType, payload)`, `onJob(jobId, cb)` | Tác vụ nặng async qua `public.job_queue` |
 | `theme.js` | `colors`, `radii`, `fonts`, `space`, `fontSize` | Inline style nếu cần |
@@ -309,6 +310,7 @@ Mini-app có thể đọc `ctx.userDevMode` + `ctx.isAppOwner` từ `getContext(
 ### Database / Backend
 - ❌ Tạo table trong schema `public`/`auth`/`storage`
 - ❌ Viết tay `app_{slug}_dev` trong migration (Reviewer tự duplicate)
+- ❌ Viết SQL touching `storage.*` (bucket auto-managed bởi Admin Portal — Reviewer block)
 - ❌ Apply migration trực tiếp qua Supabase SQL Editor (đi qua Admin Portal Reviewer)
 - ❌ Quên RLS hoặc "tạm thời" disable
 - ❌ Quên `.eq('workspace_id', ctx.workspaceId)` trong query
