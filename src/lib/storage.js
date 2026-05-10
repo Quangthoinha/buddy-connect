@@ -11,23 +11,28 @@
 // Mini-app KHÔNG nên biết đang dùng cái nào. Lưu `object_key` vào DB,
 // không bao giờ lưu URL trực tiếp (URL có thời hạn).
 //
-// Path convention: {workspace_id}/{folder}/{uuid}.{ext}
-// (NOT prefixed by schema name — bucket per-app đủ tách rồi).
+// Path convention:
+//   prod: {workspace_id}/{folder}/{uuid}.{ext}
+//   dev:  {workspace_id}/dev/{folder}/{uuid}.{ext}
+// (foldername[1] = workspace_id vẫn match RLS policy. dev có prefix /dev/ để
+// dễ wipe sạch test data: delete from storage.objects where name like '%/dev/%')
 
 import { getContext } from './context.js';
 import { getSupabase } from './supabase.js';
 
 const useR2 = import.meta.env.VITE_USE_R2 === 'true';
 const slug = import.meta.env.VITE_APP_SLUG || 'demo';
+const env = import.meta.env.VITE_APP_ENV || 'prod';
 const BUCKET = `miniapp-${slug}`;
+const ENV_PREFIX = env === 'dev' ? 'dev/' : '';
 
 const urlCache = new Map(); // objectKey → { url, expiresAt }
 
 export async function upload(file, folder = 'uploads') {
   const ctx = getContext();
   const ext = (file.name || 'bin').split('.').pop();
-  // Path: {workspace_id}/{folder}/{uuid}.{ext} — schema prefix bỏ vì bucket đã per-app
-  const objectKey = `${ctx.workspaceId}/${folder}/${cryptoUuid()}.${ext}`;
+  // Path: {workspace_id}/[dev/]{folder}/{uuid}.{ext}
+  const objectKey = `${ctx.workspaceId}/${ENV_PREFIX}${folder}/${cryptoUuid()}.${ext}`;
 
   if (!useR2) {
     const { error } = await getSupabase().storage.from(BUCKET).upload(objectKey, file);
