@@ -326,6 +326,8 @@ Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo inv
 
 7. Submit → admin portal **auto-tạo CNAME Cloudflare** `{slug}.mini` → `cname.vercel-dns.com`. Quay lại bước 5 để add custom domain prod nếu chưa làm.
 
+ℹ️ **Sau khi đổi Vercel setting** (Auth, Domain alias, env): Vercel Edge cache + Expo Go WebView cache có thể giữ response cũ vài phút. Nếu trong Expo Go thấy 403/401 mặc dù đã sửa: curl URL trên máy local trước (xác nhận Vercel trả 200), rồi **swipe Expo Go khỏi recent apps** + mở lại. Đừng vội nghi ngờ logic.
+
 ### 8.3 Quy ước branch + git flow
 
 - `main` = production (canonical, stable). Push lên main → Vercel deploy custom domain.
