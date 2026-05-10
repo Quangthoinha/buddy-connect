@@ -2,11 +2,9 @@
 -- Migration mẫu cho mini-app.
 -- Đổi `demo` thành slug thật của bạn TRƯỚC KHI SUBMIT qua Migration Reviewer.
 --
--- ⚠️ Migration Reviewer sẽ AUTO apply cho CẢ 2 schema atomic (1 transaction):
---    - app_{slug}      (production, hit khi VITE_APP_ENV=prod)
---    - app_{slug}_dev  (dev/sandbox, hit khi VITE_APP_ENV=dev)
--- File này chỉ viết cho `app_{slug}` — Reviewer tự duplicate sang `_dev`.
--- KHÔNG viết tay cả 2 (sẽ duplicate logic, dễ drift).
+-- Migration Reviewer auto duplicate file này sang schema sandbox (suffix
+-- _dev) khi apply atomic — chỉ viết cho schema chính, KHÔNG viết tay
+-- schema sandbox (Reviewer regex check sẽ reject).
 --
 -- Checklist (Migration Reviewer sẽ verify):
 --   [x] Schema riêng `app_{slug}`, không dùng `public`
