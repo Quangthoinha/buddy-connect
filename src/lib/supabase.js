@@ -20,8 +20,10 @@ import config from '../../mushy.config.json';
 const url = config.supabase.url;
 const anonKey = config.supabase.anonKey;
 const slug = config.slug;
-// VERCEL_ENV được inject qua vite.config.js define block từ process.env lúc build.
-const vercelEnv = import.meta.env.VITE_VERCEL_ENV || 'development';
+// __VERCEL_ENV__ là global build-time constant (vite.config.js define) — replace
+// ở build, KHÔNG phải runtime. Bypass Vite internal handling của import.meta.env.
+// eslint-disable-next-line no-undef
+const vercelEnv = typeof __VERCEL_ENV__ !== 'undefined' ? __VERCEL_ENV__ : 'development';
 const schema = vercelEnv === 'production' ? `app_${slug}` : `app_${slug}_dev`;
 
 if (!url || !anonKey) {

@@ -13,6 +13,6 @@ export default defineConfig({
     port: 5173,
   },
   define: {
-    'import.meta.env.VITE_VERCEL_ENV': JSON.stringify(vercelEnv),
+    __VERCEL_ENV__: JSON.stringify(vercelEnv),
   },
 });
