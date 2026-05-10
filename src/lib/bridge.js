@@ -57,6 +57,10 @@ async function mock(type, payload) {
     case 'PUSH_NOTIFICATION':
       console.log('[mock push]', payload.title, '—', payload.body);
       return { scheduled: true };
+    case 'REFRESH_TOKEN':
+      // Mock không thật được — chỉ trả error, dev local browser dùng VITE_DEV_TOKEN
+      // refresh qua npm run dev:token thay vì bridge.
+      throw new Error('REFRESH_TOKEN bridge chỉ chạy trong Shell. Dev local: npm run dev:token.');
     default:
       throw new Error(`Bridge mock chưa hỗ trợ type: ${type}`);
   }
