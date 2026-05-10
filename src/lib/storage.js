@@ -1,7 +1,7 @@
 // File storage abstraction.
 //
-// Default: Supabase Storage (bucket `miniapp-dev`). Đủ cho dev, Vercel
-// preview, và prod khi chưa cần R2.
+// Default: Supabase Storage. Bucket name = `miniapp-{slug}` (auto từ VITE_APP_SLUG).
+// Bucket được tạo qua migration của mini-app — xem `migrations/00X.sql` mẫu.
 //
 // R2: opt-in qua env `VITE_USE_R2=true`. Khi bật, upload + view đi qua
 // Edge Functions `storage-upload` / `storage-view` (cần deploy 2 functions
@@ -10,20 +10,24 @@
 //
 // Mini-app KHÔNG nên biết đang dùng cái nào. Lưu `object_key` vào DB,
 // không bao giờ lưu URL trực tiếp (URL có thời hạn).
+//
+// Path convention: {workspace_id}/{folder}/{uuid}.{ext}
+// (NOT prefixed by schema name — bucket per-app đủ tách rồi).
 
 import { getContext } from './context.js';
 import { getSupabase } from './supabase.js';
 
 const useR2 = import.meta.env.VITE_USE_R2 === 'true';
 const slug = import.meta.env.VITE_APP_SLUG || 'demo';
-const BUCKET = 'miniapp-dev';
+const BUCKET = `miniapp-${slug}`;
 
 const urlCache = new Map(); // objectKey → { url, expiresAt }
 
 export async function upload(file, folder = 'uploads') {
   const ctx = getContext();
   const ext = (file.name || 'bin').split('.').pop();
-  const objectKey = `${ctx.workspaceId}/app_${slug}/${folder}/${cryptoUuid()}.${ext}`;
+  // Path: {workspace_id}/{folder}/{uuid}.{ext} — schema prefix bỏ vì bucket đã per-app
+  const objectKey = `${ctx.workspaceId}/${folder}/${cryptoUuid()}.${ext}`;
 
   if (!useR2) {
     const { error } = await getSupabase().storage.from(BUCKET).upload(objectKey, file);
