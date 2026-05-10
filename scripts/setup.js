@@ -40,6 +40,15 @@ if (!SUPABASE_URL || !ANON_KEY || !SLUG) {
   console.error('❌ mushy.config.json thiếu slug / supabase.url / supabase.anonKey.');
   process.exit(1);
 }
+if (SLUG.includes('REPLACE_WITH')) {
+  console.error('❌ mushy.config.json còn placeholder slug "%s".', SLUG);
+  console.error('   Đổi sang slug được Mushy admin cấp (vd "expense", "crm"...) trước khi setup.');
+  process.exit(1);
+}
+if (!/^[a-z0-9][a-z0-9-]{2,40}$/.test(SLUG)) {
+  console.error('❌ Slug "%s" không hợp lệ. Phải lowercase 3-41 ký tự [a-z0-9-].', SLUG);
+  process.exit(1);
+}
 if (ANON_KEY.includes('REPLACE_WITH')) {
   console.error('❌ mushy.config.json còn placeholder anon key. Đặt giá trị thật của Mushy Supabase.');
   process.exit(1);

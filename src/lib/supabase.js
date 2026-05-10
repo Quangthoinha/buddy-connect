@@ -25,6 +25,12 @@ const schema = env === 'dev' ? `app_${slug}_dev` : `app_${slug}`;
 if (!url || !anonKey) {
   console.warn('[supabase] thiếu supabase.url hoặc supabase.anonKey trong mushy.config.json');
 }
+if (slug.includes('REPLACE_WITH')) {
+  console.warn(
+    '[mushy.config.json] slug còn placeholder "REPLACE_WITH_YOUR_SLUG". ' +
+    'Đổi sang slug Mushy admin cấp trước khi deploy. Build vẫn pass nhưng query sẽ lỗi runtime.'
+  );
+}
 
 function makeClient(schemaName) {
   const ctx = getContext();

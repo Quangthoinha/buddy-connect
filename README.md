@@ -7,17 +7,33 @@ Template repo để build mini-app trong hệ Mushy. Clone repo này, đổi `VI
 ## Quick start (local dev)
 
 ```bash
-# 1. Đổi slug trong mushy.config.json (đã có sẵn URL + anon key Mushy)
-#    "slug": "demo" → "slug": "ten-app-cua-ban"
+# 1. Đổi slug trong mushy.config.json (URL + anon key đã có sẵn)
+#    "slug": "REPLACE_WITH_YOUR_SLUG" → "slug": "ten-app-cua-ban"
+#    (Slug do Mushy admin cấp khi đăng ký mini-app vào catalog)
 
-# 2. Install + setup
-cp .env.example .env    # giữ placeholder, không cần điền gì
+# 2. Setup
+cp .env.example .env    # giữ VITE_DEV_* placeholder
 npm install
-npm run dev:setup       # Login Supabase + chọn workspace + tự ghi VITE_DEV_*
+npm run dev:setup       # Login Supabase + chọn workspace + tự ghi 4 VITE_DEV_*
 npm run dev             # localhost:5173
 ```
 
-URL + anon key Mushy committed vào `mushy.config.json` (public theo design Supabase, đã giải thích trong CLAUDE.md). KHÔNG cần xin admin.
+### `npm run dev:setup` làm gì
+
+Hỏi email + password Mushy của bạn → login Supabase → list workspace → chọn 1 → tự ghi vào `.env`:
+- `VITE_DEV_TOKEN` (JWT, hết hạn 1h)
+- `VITE_DEV_WORKSPACE_ID`
+- `VITE_DEV_USER_ID`
+- `VITE_DEV_ROLE`
+
+Mini-app local browser đọc `getContext()` → fallback lấy 4 vars này (giống Shell inject ở Expo Go).
+
+Token hết hạn sau 1h → `npm run dev:token` để refresh (không phải login lại từ đầu).
+
+**Chưa có account Mushy?** Nhờ admin tạo invite link (qua admin portal) → click → signup → join workspace.
+
+### Vì sao URL + anon key public OK
+`mushy.config.json` committed vào repo. Đó là design Supabase: anon key = "publishable key" (như Stripe pk). RLS chặn read data nhạy cảm; service_role key (full admin) NEVER public, chỉ ở Vercel server-side env. Đọc thêm trong CLAUDE.md section 4.
 
 ## Scripts
 

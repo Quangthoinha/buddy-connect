@@ -258,16 +258,42 @@ miniapp-{slug}/
 git clone <template-repo-url> miniapp-{slug}
 cd miniapp-{slug}
 
-# 2. Đổi slug trong mushy.config.json (3-41 chars [a-z0-9-], unique trong Mushy)
-#    Mở file → đổi "slug": "demo" → "slug": "expense" (vd)
-#    URL + anon key giữ nguyên (đã pre-fill bởi platform admin)
+# 2. Đổi slug trong mushy.config.json
+#    Mở file → "slug": "REPLACE_WITH_YOUR_SLUG" → "slug": "expense" (vd)
+#    Slug được Mushy admin cấp khi đăng ký mini-app (3-41 chars [a-z0-9-]).
+#    URL + anon key đã pre-fill, KHÔNG cần đổi.
 
 # 3. Install + dev setup
-cp .env.example .env    # KHÔNG cần điền gì, chỉ để VITE_DEV_* placeholder
+cp .env.example .env    # giữ placeholder VITE_DEV_*, chưa cần điền
 npm install
-npm run dev:setup       # login Supabase + chọn workspace → tự ghi VITE_DEV_TOKEN/USER/WORKSPACE
+npm run dev:setup       # ↓ giải thích chi tiết bên dưới
 npm run dev             # localhost:5173 (browser, có bridge mock)
 ```
+
+### 8.1.1 `npm run dev:setup` — flow auto-config local DEV
+
+Script tự động:
+1. **Hỏi email + password** Supabase (account của bạn — nếu chưa có thì admin Mushy invite bạn vào workspace nào đó trước qua superapp/admin portal)
+2. **Login** qua Supabase Auth → lấy JWT access token (1h expiry)
+3. **List workspace** bạn là member → bạn chọn 1
+4. **Auto ghi 4 biến** vào `.env`:
+   - `VITE_DEV_TOKEN` — JWT access token (mock cho `getContext()`)
+   - `VITE_DEV_WORKSPACE_ID` — workspace_id đã chọn
+   - `VITE_DEV_USER_ID` — auth.users.id của bạn
+   - `VITE_DEV_ROLE` — role của bạn trong workspace đó (owner/admin/member)
+
+Khi `npm run dev`, mini-app browser localhost gọi `getContext()` → fallback đọc `VITE_DEV_*` từ `.env` (không có Shell inject ở browser) → có đủ context giống chạy trong superapp.
+
+### 8.1.2 Token hết hạn sau 1 giờ
+
+JWT expire 1h → mọi query Supabase trả 401. Refresh:
+```bash
+npm run dev:token       # login lại + update VITE_DEV_TOKEN
+```
+Workspace/user/role không đổi nên chỉ cần refresh token.
+
+### 8.1.3 Không có account?
+Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo invite`), bạn click link → signup → tự động join workspace.
 
 ### 8.2 Đăng ký mini-app vào catalog Mushy (1 lần per app)
 
