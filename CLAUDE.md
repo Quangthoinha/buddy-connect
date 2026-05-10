@@ -271,7 +271,7 @@ npm run dev             # localhost:5173 (browser, có bridge mock)
 ### 8.1.1 `npm run dev:setup` — flow auto-config local DEV
 
 Script tự động:
-1. **Hỏi email + password** Supabase (account của bạn — nếu chưa có thì admin Mushy invite bạn vào workspace nào đó trước qua superapp/admin portal)
+1. **Hỏi email + password** Mushy (đăng ký + tạo workspace trên app Mushy trước nếu chưa có — xem 8.1.3)
 2. **Login** qua Supabase Auth → lấy JWT access token (1h expiry)
 3. **List workspace** bạn là member → bạn chọn 1
 4. **Auto ghi 4 biến** vào `.env`:
@@ -291,7 +291,7 @@ npm run dev:token       # login lại + update VITE_DEV_TOKEN
 Workspace/user/role không đổi nên chỉ cần refresh token.
 
 ### 8.1.3 Không có account?
-Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo invite`), bạn click link → signup → tự động join workspace.
+Cài app **Mushy** (TestFlight iOS / Play Internal Android) → mở app → **Đăng ký** → tạo workspace mới. Email + password đó dùng cho `npm run dev:setup`.
 
 ### 8.2 Đăng ký mini-app vào catalog Mushy (1 lần per app)
 

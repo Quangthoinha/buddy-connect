@@ -1,17 +1,13 @@
 // Supabase client cho mini-app.
-// - URL + anon key đọc từ mushy.config.json (committed, public — đã design vậy).
-// - Slug đọc từ mushy.config.json (đặt khi clone template).
+// - URL + anon key + slug đọc từ mushy.config.json.
 // - Token lấy từ APP_CONTEXT (do Shell inject hoặc VITE_DEV_TOKEN).
-// - Schema chọn auto theo VERCEL_ENV (Vercel inject sẵn — KHÔNG cần setup gì):
-//     production  (Vercel main branch deploy)         → app_{slug}        prod
-//     preview     (Vercel mọi branch khác main)       → app_{slug}_dev    dev sandbox
-//     development (local `npm run dev`, không Vercel) → app_{slug}_dev    dev sandbox (an toàn)
-//   Cùng 1 Supabase project, chỉ tách dữ liệu qua schema.
-// - 2 client / proxy:
-//     `db`        → scoped vào schema mini-app (theo env)
-//     `dbPublic`  → scoped vào `public` (cho workspaces, mini_apps, workspace_apps...)
-//                   Hiếm khi cần — chỉ dùng nếu app cần đọc/ghi catalog hoặc
-//                   workspace metadata (vd: Admin Portal).
+// - Schema auto theo VERCEL_ENV:
+//     production (main deploy)        → app_{slug}        prod
+//     preview    (branch khác main)   → app_{slug}_dev    dev sandbox
+//     development (local npm run dev) → app_{slug}_dev    dev sandbox
+// - 2 client:
+//     `db`       → scoped vào schema mini-app (theo env)
+//     `dbPublic` → scoped vào `public` (workspaces, mini_apps...). Hiếm dùng.
 
 import { createClient } from '@supabase/supabase-js';
 import { getContext } from './context.js';
