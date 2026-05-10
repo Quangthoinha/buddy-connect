@@ -16,10 +16,30 @@ Một **mini-app** = web app độc lập trong hệ Mushy Super App:
 
 Đọc thêm `CLAUDE.md` ở repo gốc Mushy để hiểu triết lý + kiến trúc tổng thể.
 
-### Slug + naming
+### Config — `mushy.config.json` (committed)
 
-- `VITE_APP_SLUG` xác định mọi thứ: schema `app_{slug}` + `app_{slug}_dev`, bucket storage `miniapp-{slug}`, prod domain `{slug}.mini.mushy-app.com`
-- Slug bất biến: 3-41 ký tự `[a-z0-9-]`, khi đăng ký vào Admin Portal phải unique. KHÔNG đổi slug sau khi đã có data.
+File này ở root repo, **committed Git**. Chứa 3 thứ public (Supabase design intent — đã giải thích ở section 4):
+
+```json
+{
+  "slug": "demo",
+  "supabase": {
+    "url": "https://....supabase.co",
+    "anonKey": "eyJ..."
+  }
+}
+```
+
+Khi clone template tạo mini-app mới: chỉ cần đổi `slug` → xong. URL + anon key đã sẵn (platform admin pre-fill, không cần hỏi xin).
+
+**Slug bất biến**: 3-41 ký tự `[a-z0-9-]`, unique trong catalog. Quyết định:
+- schema `app_{slug}` + `app_{slug}_dev`
+- bucket storage `miniapp-{slug}`
+- prod domain `{slug}.mini.mushy-app.com`
+
+KHÔNG đổi slug sau khi đã có data.
+
+**Vercel env vars** chỉ còn server-side + per-environment scope (xem section 8.2).
 
 ---
 
@@ -238,13 +258,14 @@ miniapp-{slug}/
 git clone <template-repo-url> miniapp-{slug}
 cd miniapp-{slug}
 
-# 2. Copy env
-cp .env.example .env
-# Điền: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (lấy từ Supabase prod), VITE_APP_SLUG
+# 2. Đổi slug trong mushy.config.json (3-41 chars [a-z0-9-], unique trong Mushy)
+#    Mở file → đổi "slug": "demo" → "slug": "expense" (vd)
+#    URL + anon key giữ nguyên (đã pre-fill bởi platform admin)
 
 # 3. Install + dev setup
+cp .env.example .env    # KHÔNG cần điền gì, chỉ để VITE_DEV_* placeholder
 npm install
-npm run dev:setup       # login + chọn workspace + ghi VITE_DEV_TOKEN/USER/WORKSPACE
+npm run dev:setup       # login Supabase + chọn workspace → tự ghi VITE_DEV_TOKEN/USER/WORKSPACE
 npm run dev             # localhost:5173 (browser, có bridge mock)
 ```
 
@@ -252,7 +273,13 @@ npm run dev             # localhost:5173 (browser, có bridge mock)
 
 1. Push lần đầu lên GitHub: tạo repo `mushy-miniapp-{slug}`, push `main` + `dev` branch
 2. Connect Vercel → tự auto-build → có URL `<project>.vercel.app`
-3. Set Vercel env vars (Production scope = `VITE_APP_ENV=prod`, Preview scope = `VITE_APP_ENV=dev`, các Supabase keys giống nhau cả 2 scope)
+3. Set Vercel env vars **đơn giản** (URL + anon key đã trong `mushy.config.json`, không cần lặp):
+   - **Production scope**: `VITE_APP_ENV=prod`
+   - **Preview scope**: `VITE_APP_ENV=dev`
+   - **Cả 2 scope** (server-side, KHÔNG `VITE_` prefix):
+     - `SUPABASE_URL` (lặp lại URL từ mushy.config.json — api/_verify.js dùng)
+     - `SUPABASE_SERVICE_ROLE_KEY` (TUYỆT ĐỐI không cho vào mushy.config.json)
+     - AI provider keys nếu mini-app dùng (`GEMINI_API_KEY`, `OPENAI_API_KEY`, vv)
 4. Mở Admin Portal (https://admin.mini.mushy-app.com) → login → catalog → **+ Đăng ký app mới**:
    - Slug: `{slug}` (uniqueness check live)
    - Tên + mô tả + icon

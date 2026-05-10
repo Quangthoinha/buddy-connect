@@ -13,12 +13,20 @@ import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = join(__dirname, '..', '.env');
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
+const root = join(__dirname, '..');
+const envPath = join(root, '.env');
+const configPath = join(root, 'mushy.config.json');
 
-if (!SUPABASE_URL || !ANON_KEY) {
-  console.error('Thiếu VITE_SUPABASE_URL hoặc VITE_SUPABASE_ANON_KEY trong .env');
+if (!existsSync(configPath)) {
+  console.error('❌ Thiếu mushy.config.json ở root repo.');
+  process.exit(1);
+}
+const config = JSON.parse(readFileSync(configPath, 'utf8'));
+const SUPABASE_URL = config.supabase?.url;
+const ANON_KEY = config.supabase?.anonKey;
+
+if (!SUPABASE_URL || !ANON_KEY || ANON_KEY.includes('REPLACE_WITH')) {
+  console.error('❌ mushy.config.json thiếu/placeholder supabase URL hoặc anon key.');
   process.exit(1);
 }
 

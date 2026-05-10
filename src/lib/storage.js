@@ -19,9 +19,10 @@
 
 import { getContext } from './context.js';
 import { getSupabase } from './supabase.js';
+import config from '../../mushy.config.json';
 
 const useR2 = import.meta.env.VITE_USE_R2 === 'true';
-const slug = import.meta.env.VITE_APP_SLUG || 'demo';
+const slug = config.slug;
 const env = import.meta.env.VITE_APP_ENV || 'prod';
 const BUCKET = `miniapp-${slug}`;
 const ENV_PREFIX = env === 'dev' ? 'dev/' : '';

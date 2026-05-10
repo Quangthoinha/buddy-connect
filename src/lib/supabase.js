@@ -1,8 +1,10 @@
 // Supabase client cho mini-app.
+// - URL + anon key đọc từ mushy.config.json (committed, public — đã design vậy).
+// - Slug đọc từ mushy.config.json (đặt khi clone template).
 // - Token lấy từ APP_CONTEXT (do Shell inject hoặc VITE_DEV_TOKEN).
-// - Schema chọn theo VITE_APP_ENV:
+// - Schema chọn theo VITE_APP_ENV (Vercel Production scope = 'prod', Preview = 'dev'):
 //     prod (default) → app_{slug}        — production deploy
-//     dev            → app_{slug}_dev    — preview deploy (Vercel Preview scope)
+//     dev            → app_{slug}_dev    — preview deploy
 //   Cùng 1 Supabase project, chỉ tách dữ liệu qua schema. Pattern Zalo-style.
 // - 2 client / proxy:
 //     `db`        → scoped vào schema mini-app (theo env)
@@ -12,15 +14,16 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { getContext } from './context.js';
+import config from '../../mushy.config.json';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const slug = import.meta.env.VITE_APP_SLUG || 'demo';
+const url = config.supabase.url;
+const anonKey = config.supabase.anonKey;
+const slug = config.slug;
 const env = import.meta.env.VITE_APP_ENV || 'prod';   // 'prod' | 'dev'. Default prod cho safety.
 const schema = env === 'dev' ? `app_${slug}_dev` : `app_${slug}`;
 
 if (!url || !anonKey) {
-  console.warn('[supabase] thiếu VITE_SUPABASE_URL hoặc VITE_SUPABASE_ANON_KEY trong .env');
+  console.warn('[supabase] thiếu supabase.url hoặc supabase.anonKey trong mushy.config.json');
 }
 
 function makeClient(schemaName) {

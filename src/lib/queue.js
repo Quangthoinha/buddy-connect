@@ -10,8 +10,9 @@
 import { getSupabase } from './supabase.js';
 import { getContext } from './context.js';
 import { subscribeBroadcast } from './realtime.js';
+import config from '../../mushy.config.json';
 
-const slug = import.meta.env.VITE_APP_SLUG || 'demo';
+const slug = config.slug;
 
 export async function enqueue(jobType, payload) {
   const ctx = getContext();

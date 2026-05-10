@@ -7,9 +7,11 @@
 //   → cho queue/job pattern.
 
 import { getSupabase } from './supabase.js';
+import config from '../../mushy.config.json';
 
-const slug = import.meta.env.VITE_APP_SLUG || 'demo';
-const schema = `app_${slug}`;
+const slug = config.slug;
+const env = import.meta.env.VITE_APP_ENV || 'prod';
+const schema = env === 'dev' ? `app_${slug}_dev` : `app_${slug}`;
 
 export function subscribeToTable(table, workspaceId, callback) {
   const channel = getSupabase()

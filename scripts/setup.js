@@ -25,15 +25,27 @@ import { stdin as input, stdout as output } from 'node:process';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const envPath = join(root, '.env');
+const configPath = join(root, 'mushy.config.json');
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
-
-if (!SUPABASE_URL || !ANON_KEY) {
-  console.error('❌ Cần VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY trong .env trước khi chạy setup.');
-  console.error('   Copy .env.example → .env và điền giá trị.');
+if (!existsSync(configPath)) {
+  console.error('❌ Thiếu mushy.config.json ở root repo.');
   process.exit(1);
 }
+const config = JSON.parse(readFileSync(configPath, 'utf8'));
+const SUPABASE_URL = config.supabase?.url;
+const ANON_KEY = config.supabase?.anonKey;
+const SLUG = config.slug;
+
+if (!SUPABASE_URL || !ANON_KEY || !SLUG) {
+  console.error('❌ mushy.config.json thiếu slug / supabase.url / supabase.anonKey.');
+  process.exit(1);
+}
+if (ANON_KEY.includes('REPLACE_WITH')) {
+  console.error('❌ mushy.config.json còn placeholder anon key. Đặt giá trị thật của Mushy Supabase.');
+  process.exit(1);
+}
+console.log(`Slug: ${SLUG}`);
+console.log(`Supabase: ${SUPABASE_URL}\n`);
 
 function makeClient(token) {
   return createClient(SUPABASE_URL, ANON_KEY, {

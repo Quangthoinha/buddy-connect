@@ -7,16 +7,17 @@ Template repo để build mini-app trong hệ Mushy. Clone repo này, đổi `VI
 ## Quick start (local dev)
 
 ```bash
-# 1. Copy + điền env
-cp .env.example .env
-# Cần: VITE_APP_SLUG, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
-# (Hỏi admin Mushy lấy Supabase URL + anon key)
+# 1. Đổi slug trong mushy.config.json (đã có sẵn URL + anon key Mushy)
+#    "slug": "demo" → "slug": "ten-app-cua-ban"
 
 # 2. Install + setup
+cp .env.example .env    # giữ placeholder, không cần điền gì
 npm install
-npm run dev:setup       # Login Supabase + chọn workspace + ghi VITE_DEV_*
+npm run dev:setup       # Login Supabase + chọn workspace + tự ghi VITE_DEV_*
 npm run dev             # localhost:5173
 ```
+
+URL + anon key Mushy committed vào `mushy.config.json` (public theo design Supabase, đã giải thích trong CLAUDE.md). KHÔNG cần xin admin.
 
 ## Scripts
 
@@ -60,6 +61,7 @@ Standard Git flow: code daily trên `dev`, PR/merge `dev → main` để ship pr
 ## Layout repo
 
 ```
+mushy.config.json         ← slug + Supabase URL/anon key (committed, public)
 src/
 ├── App.jsx               ← UI mini-app (sửa đây khi build feature)
 ├── App.css               ← style app-specific (override theme nếu cần)
