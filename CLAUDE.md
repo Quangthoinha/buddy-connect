@@ -303,15 +303,28 @@ Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo inv
    - AI provider keys nếu mini-app dùng (`GEMINI_API_KEY`, `OPENAI_API_KEY`, vv)
 
    Schema dev/prod tự switch theo `VERCEL_ENV` Vercel inject sẵn — không cần env var nào ở client.
-4. Mở Admin Portal (https://admin.mini.mushy-app.com) → login → catalog → **+ Đăng ký app mới**:
+
+4. **Vercel Settings → Deployment Protection** (BẮT BUỘC):
+   - **Vercel Authentication**: đổi sang **Disabled** → Save.
+   - Lý do: mặc định Vercel chặn preview deployment bằng SSO. Superapp WebView không có session Vercel → 401, dev_mode vô dụng. Mushy = internal team, RLS Supabase đã bảo vệ data → không cần SSO layer này.
+
+5. **Vercel Settings → Domains** — gán đúng branch cho 2 alias:
+
+   | Alias | Branch cần gán | Bước thao tác |
+   |---|---|---|
+   | `<project>.vercel.app` (auto-gán bởi Vercel) | **dev** (Preview) | Click row → Edit → **Git Branch: `dev`** → Save. Mặc định Vercel gán Production — phải đổi tay. Đây là URL preview_url sẽ paste vào admin portal ở bước 7. |
+   | `{slug}.mini.mushy-app.com` (custom domain prod) | **main** (Production) | Add domain → assign Git Branch = `main` → Save. Đợi DNS verify (CNAME đã được admin portal auto-tạo ở bước 7). |
+
+   ⚠️ **Bước này chết người nếu sai.** Mặc định Vercel để `<project>.vercel.app` cho Production branch — nếu không đổi sang `dev`, bật dev_mode trong superapp vẫn load build production → query schema prod → **toàn bộ tách dev/prod vô nghĩa**.
+
+6. Mở Admin Portal (https://admin.mini.mushy-app.com) → login → catalog → **+ Đăng ký app mới**:
    - Slug: `{slug}` (uniqueness check live)
    - Tên + mô tả + icon
-   - Preview URL: paste `<project>.vercel.app` URL của Vercel
+   - **Preview URL**: paste `https://<project>.vercel.app` (sau khi đã re-assign sang branch dev ở bước 5)
    - Production URL: **auto-generated** từ slug → `https://{slug}.mini.mushy-app.com` (KHÔNG cho user nhập)
    - Visibility: **Private** (default — chỉ owner thấy) hoặc **Public** (mọi ws thấy + ws owner enable)
-5. Submit → admin portal **auto-tạo CNAME Cloudflare** `{slug}.mini` → `cname.vercel-dns.com`
-6. Dialog success hiện hướng dẫn Vercel: vào project Settings → Domains → add `{slug}.mini.mushy-app.com` → assign Git Branch = `main`
-7. Vercel verify DNS (vài phút) → custom domain live
+
+7. Submit → admin portal **auto-tạo CNAME Cloudflare** `{slug}.mini` → `cname.vercel-dns.com`. Quay lại bước 5 để add custom domain prod nếu chưa làm.
 
 ### 8.3 Quy ước branch + git flow
 
