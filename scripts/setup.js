@@ -1,16 +1,10 @@
 #!/usr/bin/env node
 /**
  * Một lần setup môi trường dev cho mini-app:
- *   1. Login Supabase (magic link hoặc password) → lấy access token
- *   2. Chọn / tạo workspace
- *   3. Apply migration mới nhất trong ./migrations
- *   4. Tạo storage bucket dev nếu chưa có
- *   5. Seed sample data
- *   6. Ghi VITE_DEV_TOKEN, VITE_DEV_WORKSPACE_ID, VITE_DEV_USER_ID, VITE_DEV_ROLE vào .env
- *
- * GHI CHÚ: Đây là skeleton. Khi superapp + Admin Portal đã có, một số bước
- * (apply migration, tạo workspace) sẽ chuyển sang gọi API riêng. Hiện tại
- * dùng Supabase trực tiếp với anon key + service role chỉ-cho-dev.
+ *   1. Login Mushy account (email + password đã đăng ký trên Mushy app)
+ *   2. Chọn workspace (đã tạo trên Mushy app — auto-tạo "Dev Workspace" nếu chưa có)
+ *   3. List migrations (apply qua Admin Portal Reviewer, KHÔNG SQL Editor)
+ *   4. Ghi VITE_DEV_TOKEN, VITE_DEV_WORKSPACE_ID, VITE_DEV_USER_ID, VITE_DEV_ROLE vào .env
  */
 
 import './_node-shim.js';
@@ -109,7 +103,7 @@ async function main() {
   if (existsSync(migDir)) {
     const files = readdirSync(migDir).filter((f) => f.endsWith('.sql')).sort();
     if (files.length) {
-      console.log('\nMigrations tìm thấy (apply qua Admin Portal hoặc Supabase SQL editor):');
+      console.log('\nMigrations tìm thấy (apply qua Admin Portal Reviewer):');
       files.forEach((f) => console.log('  -', f));
     }
   }
