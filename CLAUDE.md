@@ -46,14 +46,18 @@ KHÔNG đổi slug sau khi đã có data.
 ## 2. Môi trường dev / prod
 
 ### 2.1 Schema namespace
-- `app_{slug}`     → production (hit khi `VITE_APP_ENV=prod`, frontend deploy ở `{slug}.mini.mushy-app.com`)
-- `app_{slug}_dev` → dev sandbox (hit khi `VITE_APP_ENV=dev`, frontend deploy ở `*.vercel.app`)
+- `app_{slug}`     → production (deploy `main` → custom domain `{slug}.mini.mushy-app.com`)
+- `app_{slug}_dev` → dev sandbox (deploy mọi branch khác main → `*.vercel.app`, và local `npm run dev`)
 
 User auth + workspaces dùng chung 1 DB → đăng nhập 1 lần, real account ở mọi mode.
 
-### 2.2 Vercel branch + env
-- Branch `main` → Vercel **Production** → custom domain `{slug}.mini.mushy-app.com` → `VITE_APP_ENV=prod`
-- Branch `dev`  → Vercel **Preview** → URL auto `<project>.vercel.app` → `VITE_APP_ENV=dev`
+### 2.2 Schema selection — fully automatic
+Mini-app tự chọn schema theo `process.env.VERCEL_ENV` (Vercel inject sẵn lúc build):
+- `production` → schema prod
+- `preview` → schema dev
+- `development` (local) → schema dev (an toàn — không touch prod data)
+
+**KHÔNG cần setup env var nào ở Vercel cho cái này.** Logic ở `vite.config.js` + `src/lib/supabase.js`.
 
 ⚠️ **Vercel Free plan**: custom domain CHỈ gắn vào production. Preview phải dùng `*.vercel.app`.
 
@@ -293,13 +297,12 @@ Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo inv
 
 1. Push lần đầu lên GitHub: tạo repo `mushy-miniapp-{slug}`, push `main` + `dev` branch
 2. Connect Vercel → tự auto-build → có URL `<project>.vercel.app`
-3. Set Vercel env vars **đơn giản** (URL + anon key đã trong `mushy.config.json`, không cần lặp):
-   - **Production scope**: `VITE_APP_ENV=prod`
-   - **Preview scope**: `VITE_APP_ENV=dev`
-   - **Cả 2 scope** (server-side, KHÔNG `VITE_` prefix):
-     - `SUPABASE_URL` (lặp lại URL từ mushy.config.json — api/_verify.js dùng)
-     - `SUPABASE_SERVICE_ROLE_KEY` (TUYỆT ĐỐI không cho vào mushy.config.json)
-     - AI provider keys nếu mini-app dùng (`GEMINI_API_KEY`, `OPENAI_API_KEY`, vv)
+3. Set Vercel env vars (chỉ server-side, KHÔNG `VITE_` prefix) — **cả 2 scope** Production + Preview:
+   - `SUPABASE_URL` (lặp lại URL từ mushy.config.json — api/_verify.js dùng)
+   - `SUPABASE_SERVICE_ROLE_KEY` (TUYỆT ĐỐI không cho vào mushy.config.json)
+   - AI provider keys nếu mini-app dùng (`GEMINI_API_KEY`, `OPENAI_API_KEY`, vv)
+
+   Schema dev/prod tự switch theo `VERCEL_ENV` Vercel inject sẵn — không cần env var nào ở client.
 4. Mở Admin Portal (https://admin.mini.mushy-app.com) → login → catalog → **+ Đăng ký app mới**:
    - Slug: `{slug}` (uniqueness check live)
    - Tên + mô tả + icon

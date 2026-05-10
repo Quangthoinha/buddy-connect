@@ -2,10 +2,11 @@
 // - URL + anon key đọc từ mushy.config.json (committed, public — đã design vậy).
 // - Slug đọc từ mushy.config.json (đặt khi clone template).
 // - Token lấy từ APP_CONTEXT (do Shell inject hoặc VITE_DEV_TOKEN).
-// - Schema chọn theo VITE_APP_ENV (Vercel Production scope = 'prod', Preview = 'dev'):
-//     prod (default) → app_{slug}        — production deploy
-//     dev            → app_{slug}_dev    — preview deploy
-//   Cùng 1 Supabase project, chỉ tách dữ liệu qua schema. Pattern Zalo-style.
+// - Schema chọn auto theo VERCEL_ENV (Vercel inject sẵn — KHÔNG cần setup gì):
+//     production  (Vercel main branch deploy)         → app_{slug}        prod
+//     preview     (Vercel mọi branch khác main)       → app_{slug}_dev    dev sandbox
+//     development (local `npm run dev`, không Vercel) → app_{slug}_dev    dev sandbox (an toàn)
+//   Cùng 1 Supabase project, chỉ tách dữ liệu qua schema.
 // - 2 client / proxy:
 //     `db`        → scoped vào schema mini-app (theo env)
 //     `dbPublic`  → scoped vào `public` (cho workspaces, mini_apps, workspace_apps...)
@@ -19,8 +20,9 @@ import config from '../../mushy.config.json';
 const url = config.supabase.url;
 const anonKey = config.supabase.anonKey;
 const slug = config.slug;
-const env = import.meta.env.VITE_APP_ENV || 'prod';   // 'prod' | 'dev'. Default prod cho safety.
-const schema = env === 'dev' ? `app_${slug}_dev` : `app_${slug}`;
+// VERCEL_ENV được inject qua vite.config.js define block từ process.env lúc build.
+const vercelEnv = import.meta.env.VITE_VERCEL_ENV || 'development';
+const schema = vercelEnv === 'production' ? `app_${slug}` : `app_${slug}_dev`;
 
 if (!url || !anonKey) {
   console.warn('[supabase] thiếu supabase.url hoặc supabase.anonKey trong mushy.config.json');
