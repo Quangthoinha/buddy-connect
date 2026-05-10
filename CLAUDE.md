@@ -340,6 +340,8 @@ Nhờ Mushy admin tạo invite link (qua admin portal `Workspace → + Tạo inv
 6. Quota: 100 review/user/ngày (consume_ai_quota RPC enforce)
 7. Audit log lưu trong `public.schema_migrations` (owner workspace đọc được)
 
+⚠️ **Sau migration ĐẦU TIÊN của mỗi mini-app** (1 lần): vào Supabase Dashboard → **Settings → API → Exposed schemas** → thêm `app_{slug}, app_{slug}_dev` vào list. Mặc định Supabase chỉ expose `public, graphql_public` → client báo "Invalid schema" nếu thiếu. Khi tạo migration sau cho cùng mini-app thì không cần làm lại.
+
 ### 8.5 Hàng ngày
 - JWT hết hạn sau 1 giờ → `npm run dev:token` để refresh
 - Test trong browser (mock) trước, sau đó qua Vercel preview + Expo Go (Shell thật)
