@@ -32,10 +32,15 @@ File này ở root repo, **committed Git**. Chứa 3 thứ public (Supabase desi
 
 Khi clone template tạo mini-app mới: chỉ cần đổi `slug` → xong. URL + anon key đã sẵn (platform admin pre-fill, không cần hỏi xin).
 
-**Slug bất biến**: 3-41 ký tự `[a-z0-9-]`, unique trong catalog. Quyết định:
+**Slug bất biến**: 3-41 ký tự `[a-z0-9_]` — **KHÔNG dùng dấu gạch ngang `-`**. Lý do: schema `app_{slug}` đi thẳng vào SQL không quote → Postgres parser hỏng nếu slug có dash (`app_dang-cap-trua-nay` parse fail). Phải dùng underscore: `dang_cap_trua_nay`.
+
+Slug quyết định:
 - schema `app_{slug}` + `app_{slug}_dev`
-- bucket storage `miniapp-{slug}`
+- bucket storage `miniapp-{slug}` (dấu `-` ở "miniapp-" là literal, OK)
 - prod domain `{slug}.mini.mushy-app.com`
+
+Vd hợp lệ: `lunch`, `todo`, `expense_tracker`, `dang_cap_trua_nay` (single word hoặc underscore-separated).
+Vd KHÔNG hợp lệ: `expense-tracker`, `dang-cap-trua-nay`, `My-App`.
 
 KHÔNG đổi slug sau khi đã có data.
 

@@ -17,8 +17,9 @@ Template repo để build mini-app trong hệ Mushy. Clone repo này, đổi `sl
 
 ```bash
 # 1. Đổi slug trong mushy.config.json
-#    "slug": "REPLACE_WITH_YOUR_SLUG" → "slug": "ten-app-cua-ban"
-#    (Slug do Mushy admin cấp khi đăng ký mini-app vào catalog. 3-41 chars [a-z0-9-].)
+#    "slug": "REPLACE_WITH_YOUR_SLUG" → "slug": "ten_app_cua_ban"
+#    (3-41 ký tự [a-z0-9_]. CHỈ underscore, KHÔNG dùng dấu gạch ngang.
+#     Lý do: schema "app_{slug}" — Postgres parser hỏng nếu có dash.)
 
 # 2. Setup
 cp .env.example .env    # giữ VITE_DEV_* placeholder
