@@ -10,11 +10,12 @@
 import './_node-shim.js';
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import { spawnSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
@@ -39,8 +40,8 @@ if (SLUG.includes('REPLACE_WITH')) {
   console.error('   Đổi sang slug được Mushy admin cấp (vd "expense", "crm"...) trước khi setup.');
   process.exit(1);
 }
-if (!/^[a-z0-9][a-z0-9-]{2,40}$/.test(SLUG)) {
-  console.error('❌ Slug "%s" không hợp lệ. Phải lowercase 3-41 ký tự [a-z0-9-].', SLUG);
+if (!/^[a-z0-9][a-z0-9_-]{2,40}$/.test(SLUG)) {
+  console.error('❌ Slug "%s" không hợp lệ. Phải lowercase 3-41 ký tự [a-z0-9_-].', SLUG);
   process.exit(1);
 }
 if (ANON_KEY.includes('REPLACE_WITH')) {
@@ -132,8 +133,91 @@ async function main() {
   }
   writeFileSync(envPath, out.join('\n'));
   console.log('\n✓ Đã ghi VITE_DEV_* vào .env');
+
+  await ensureMainBranch();
+
   console.log('\nXong! Chạy `npm run dev` để start.\n');
   rl.close();
+}
+
+function git(args, opts = {}) {
+  return spawnSync('git', args, { cwd: root, encoding: 'utf8', ...opts });
+}
+
+async function ensureMainBranch() {
+  if (!existsSync(join(root, '.git'))) return;
+
+  const head = git(['symbolic-ref', '--short', 'HEAD']);
+  if (head.status !== 0) return;
+  const currentBranch = head.stdout.trim();
+  if (currentBranch === 'main') return;
+
+  const localMain = git(['rev-parse', '--verify', '--quiet', 'refs/heads/main']).status === 0;
+  const hasOrigin = git(['remote', 'get-url', 'origin']).status === 0;
+  const remoteMain = hasOrigin
+    && git(['ls-remote', '--exit-code', '--heads', 'origin', 'main']).status === 0;
+  if (localMain || remoteMain) return;
+
+  console.log('');
+  console.log(`⚠️  Repo chưa có branch \`main\` (đang ở \`${currentBranch}\`).`);
+  console.log('   Khi connect Vercel, Vercel auto-promote branch duy nhất thành Production Branch.');
+  console.log(`   → mini-app build trên \`${currentBranch}\` sẽ có VERCEL_ENV=production`);
+  console.log('   → query schema `app_{slug}` (PROD) thay vì `app_{slug}_dev`');
+  console.log('   → seed data dev không hiện trong Mushy dev_mode → app trống.');
+  console.log('   → Tạo branch `main` placeholder trước khi connect Vercel.');
+
+  if (!hasOrigin) {
+    console.log('');
+    console.log('   ℹ️  Repo chưa có remote `origin`. Setup remote rồi chạy lệnh:');
+    console.log('     git worktree add ../tmp-main --orphan main');
+    console.log('     echo \'<!doctype html><meta charset="utf-8"><title>🚧</title><body><h1>🚧 Đang phát triển</h1></body>\' > ../tmp-main/index.html');
+    console.log('     (cd ../tmp-main && git add index.html && git commit -m "🚧 Placeholder main")');
+    console.log('     (cd ../tmp-main && git push -u origin main)');
+    console.log('     git worktree remove ../tmp-main');
+    return;
+  }
+
+  const ans = (await rl.question('\n   Auto-tạo placeholder main + push lên origin? (y/N): ')).trim().toLowerCase();
+  if (ans !== 'y' && ans !== 'yes') {
+    console.log('   Skip. Tự làm khi sẵn sàng.');
+    return;
+  }
+
+  const worktreeDir = join(root, '..', `tmp-main-${Date.now()}`);
+  console.log(`   → git worktree add ${worktreeDir} --orphan main`);
+  let r = git(['worktree', 'add', worktreeDir, '--orphan', 'main']);
+  if (r.status !== 0) {
+    console.log('   ❌ git worktree add failed:', r.stderr.trim());
+    console.log('   (Yêu cầu git ≥ 2.42 cho `worktree add --orphan`. Update git hoặc chạy lệnh tay ở trên.)');
+    return;
+  }
+
+  let pushed = false;
+  try {
+    writeFileSync(join(worktreeDir, 'index.html'),
+      '<!doctype html>\n<meta charset="utf-8">\n<title>🚧 Đang phát triển</title>\n' +
+      '<body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#FFF7F8;color:#0F0F12">\n' +
+      '  <main style="text-align:center"><h1 style="font-size:3rem;margin:0">🚧</h1>' +
+      '<p style="margin-top:1rem;opacity:.7">Đang phát triển</p></main>\n</body>\n');
+    r = spawnSync('git', ['add', 'index.html'], { cwd: worktreeDir, encoding: 'utf8' });
+    if (r.status !== 0) throw new Error('git add: ' + r.stderr.trim());
+    r = spawnSync('git', ['commit', '-m', '🚧 Placeholder main branch'], { cwd: worktreeDir, encoding: 'utf8' });
+    if (r.status !== 0) throw new Error('git commit: ' + r.stderr.trim());
+    r = spawnSync('git', ['push', '-u', 'origin', 'main'], { cwd: worktreeDir, stdio: 'inherit' });
+    if (r.status !== 0) throw new Error('git push exit ' + r.status);
+    pushed = true;
+    console.log('   ✓ Đã push placeholder `main` lên origin.');
+  } catch (e) {
+    console.log('   ❌', e.message);
+  } finally {
+    const rm = git(['worktree', 'remove', '--force', worktreeDir]);
+    if (rm.status !== 0) {
+      try { rmSync(worktreeDir, { recursive: true, force: true }); } catch {}
+    }
+    if (pushed) {
+      console.log(`   ℹ️  Local \`main\` đã tạo, đang track origin/main. Bạn vẫn ở \`${currentBranch}\`.`);
+    }
+  }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

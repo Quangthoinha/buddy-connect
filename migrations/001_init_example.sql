@@ -1,10 +1,14 @@
 -- =====================================================================
 -- Migration mẫu cho mini-app.
--- Đổi `demo` thành slug thật của bạn TRƯỚC KHI SUBMIT qua Migration Reviewer.
+-- Đổi `demo` thành schema thật TRƯỚC KHI SUBMIT qua Migration Reviewer.
 --
--- Schema `app_{slug}` đã được Admin Portal auto-tạo khi register mini-app
--- (cùng grants + default privileges). Migration KHÔNG cần CREATE SCHEMA
--- hay GRANT — chỉ tập trung vào tables, indexes, RLS policies, triggers.
+-- ⚠️ Schema name = "app_{slug}" với dash → underscore.
+--    Vd: slug "lunch-plan" → schema "app_lunch_plan" (KHÔNG "app_lunch-plan").
+--    Lý do: Postgres unquoted identifier không nhận dash.
+--
+-- Schema `app_{slug_normalized}` đã được Admin Portal auto-tạo khi register
+-- mini-app (cùng grants + default privileges). Migration KHÔNG cần CREATE
+-- SCHEMA hay GRANT — chỉ tập trung vào tables, indexes, RLS policies, triggers.
 --
 -- Migration Reviewer auto duplicate file này sang schema sandbox (suffix
 -- _dev) khi apply atomic — chỉ viết cho schema chính.
