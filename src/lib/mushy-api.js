@@ -14,10 +14,18 @@
 //   // Gửi chỉ cho 1 số user trong workspace
 //   await mushyApi.push({ title, body, userIds: ['uuid1', 'uuid2'] });
 //
-//   // Deep link payload (Shell sẽ open mini-app khi tap noti)
+//   // Deep link payload — Shell open mini-app khi tap noti.
+//   // `workspaceId` được auto-inject từ ctx (Shell cần verify membership +
+//   // lookup workspace metadata trước khi mở app). `appSlug` BẮT BUỘC nếu
+//   // muốn deeplink vào mini-app — thiếu sẽ chỉ về Mushy home.
+//   // Convention khớp `superapp/lib/notification-router.js`.
 //   await mushyApi.push({
 //     title, body,
-//     data: { appSlug: 'lunch-plan', screen: 'detail', recordId: '...' },
+//     data: {
+//       appSlug: 'lunch-plan',  // BẮT BUỘC cho deeplink
+//       screen: 'detail',        // optional — Shell pass qua query
+//       recordId: '...',         // optional
+//     },
 //   });
 
 import config from '../../mushy.config.json';
@@ -62,11 +70,20 @@ export const mushyApi = {
    * @param {object} opts
    * @param {string} opts.title
    * @param {string} opts.body
-   * @param {object} [opts.data]   - deep link payload (appSlug, screen, recordId…)
+   * @param {object} [opts.data] - Deep link payload Shell đọc khi user tap noti.
+   *   `workspaceId` auto-inject từ ctx (Shell cần để verify membership + switch
+   *   workspace trước khi mở app). Thêm `appSlug` để mở thẳng mini-app, `screen`
+   *   + `recordId` để pass qua query params. Override `workspaceId` nếu push
+   *   cross-workspace (rare).
    * @param {string[]} [opts.userIds] - chỉ gửi cho subset members
    * @returns {Promise<{sent: number, tokens: number, cleaned: number, tickets: any[]}>}
    */
-  push({ title, body, data, userIds }) {
-    return call('push', { title, body, data, userIds });
+  push({ title, body, data = {}, userIds }) {
+    return call('push', {
+      title,
+      body,
+      data: { workspaceId: getContext().workspaceId, ...data },
+      userIds,
+    });
   },
 };
