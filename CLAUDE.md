@@ -159,7 +159,7 @@ Xem `migrations/001_init_example.sql` làm template chi tiết.
 |---|---|---|
 | `context.js` | `getContext()`, `isInShell()` | Lấy `{ token, userId, workspaceId, workspaceSlug, role, userDevMode, isAppOwner }` |
 | `supabase.js` | `db`, `dbPublic`, `getSupabase()`, `getPublicSupabase()` | `db` scoped vào `app_{slug}` (theo VITE_APP_ENV → có thể là `_dev`); `dbPublic` cho public.* (hiếm dùng) |
-| `bridge.js` | `callNative('TYPE', payload)` | Gọi native: `GET_LOCATION` / `OPEN_CAMERA` / `PICK_FILE` / `PUSH_NOTIFICATION`. Promise, timeout 10s. Mock tự bật khi không có Shell. |
+| `bridge.js` | `callNative('TYPE', payload)`, `bridge.*` (typed helpers) | Native bridge. Type: `GET_LOCATION` / `OPEN_CAMERA` / `PICK_FILE` / `PUSH_NOTIFICATION` / `OPEN_TEL` / `OPEN_URL` / `SHARE` / `HAPTIC` / `SCAN_QR` / `BIOMETRIC` / `REFRESH_TOKEN`. Helpers ưu tiên (`bridge.tel(...)`, `bridge.share(...)`, `bridge.haptic('success')`, `bridge.scanQr()`, `bridge.biometric(...)`) — auto-fallback browser khi DEV. Mock tự bật khi không có Shell. Generic non-http scheme (zalo://, whatsapp://, maps://...) tự được Shell route ra Linking — `<a href="...">` cũng work. |
 | `storage.js` | `upload(file, folder)`, `getViewUrl(objectKey)` | Bucket `miniapp-{slug}` **auto-tạo bởi Admin Portal khi register app** (giống DNS). Mini-app dev KHÔNG viết storage SQL. Path: `{ws_id}/[dev/]{folder}/{uuid}.{ext}` (dev có prefix `dev/` để dễ wipe). Lưu `object_key` vào DB. R2 opt-in qua `VITE_USE_R2=true`. |
 | `realtime.js` | `subscribeToTable(table, workspaceId, cb)`, `subscribeBroadcast()` | Trả unsubscribe — gọi khi unmount! |
 | `queue.js` | `enqueue(jobType, payload)`, `onJob(jobId, cb)` | Tác vụ nặng async qua `public.job_queue` |
@@ -423,6 +423,12 @@ Khi user nói:
 - **"Gọi AI"** → tạo `api/X-proxy.js` dùng `_verify.js`, set key Vercel env. Anti-injection: wrap input, force JSON, validate output.
 - **"Upload file"** → dùng `upload(file, folder)` từ `storage.js`, lưu `object_key` vào DB, `getViewUrl()` khi render.
 - **"Push notification"** → local (chỉ device user): `callNative('PUSH_NOTIFICATION', { title, body })` từ `bridge.js`. Remote (gửi cho members workspace): `mushyApi.push({ title, body, data?, userIds? })` từ `mushy-api.js` → superapp `mini-proxy` → Expo Push API.
+- **"Tap-to-call số điện thoại"** → `bridge.tel('0901234567')`. Browser fallback tự `window.location = tel:...`.
+- **"Mở external link"** → `bridge.openUrl('https://...')` hoặc anchor `<a href="zalo://...">` (Shell route ra Linking tự động).
+- **"Share / Chia sẻ"** → `bridge.share({ title, message, url })` → native share sheet. Browser fallback navigator.share / clipboard.
+- **"Haptic / Rung phản hồi"** → `bridge.haptic('success'|'warning'|'error'|'light'|'medium'|'heavy'|'selection')`. Free UX win cho confirm/swipe action.
+- **"Quét QR"** → `bridge.scanQr()` → `{ data, type }`. Mở camera full-screen overlay trong Shell.
+- **"Xác thực sinh trắc / Face ID"** → `bridge.biometric({ promptMessage: 'Xác nhận' })` → `{ success }`. Gate action nhạy cảm. Browser luôn throw — mini-app phải có password fallback.
 
 Memory bên Mushy chính (đọc nếu cần):
 - `project_environments.md` — kiến trúc dev/prod, schema-per-env, dev_mode
