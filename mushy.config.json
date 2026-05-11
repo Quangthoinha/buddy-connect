@@ -1,5 +1,5 @@
 {
-  "_comment": "BƯỚC ĐẦU TIÊN khi clone template: thay 'slug' bên dưới bằng slug đăng ký với Mushy admin (vd 'expense', 'todo', 'lunch_plan'). 3-41 ký tự [a-z0-9_] — CHỈ underscore, KHÔNG dash (schema 'app_{slug}' phải là Postgres identifier hợp lệ).",
+  "_comment": "BƯỚC ĐẦU TIÊN khi clone template: thay 'slug' bên dưới bằng slug đăng ký với Mushy admin (vd 'expense', 'lunch-plan'). 3-41 ký tự [a-z0-9_-]. Schema name = 'app_{slug}' với dash → underscore (slug 'lunch-plan' → schema 'app_lunch_plan').",
 
   "slug": "REPLACE_WITH_YOUR_SLUG",
 

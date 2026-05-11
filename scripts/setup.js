@@ -39,10 +39,8 @@ if (SLUG.includes('REPLACE_WITH')) {
   console.error('   Đổi sang slug được Mushy admin cấp (vd "expense", "crm"...) trước khi setup.');
   process.exit(1);
 }
-if (!/^[a-z0-9][a-z0-9_]{2,40}$/.test(SLUG)) {
-  console.error('❌ Slug "%s" không hợp lệ. Phải lowercase 3-41 ký tự [a-z0-9_].', SLUG);
-  console.error('   KHÔNG dùng dấu gạch ngang "-" — Postgres schema dùng "app_{slug}" sẽ lỗi.');
-  console.error('   Vd hợp lệ: "lunch", "todo", "dang_cap_trua_nay" (underscore).');
+if (!/^[a-z0-9][a-z0-9_-]{2,40}$/.test(SLUG)) {
+  console.error('❌ Slug "%s" không hợp lệ. Phải lowercase 3-41 ký tự [a-z0-9_-].', SLUG);
   process.exit(1);
 }
 if (ANON_KEY.includes('REPLACE_WITH')) {
