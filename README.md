@@ -54,7 +54,7 @@ Token hết hạn sau 1h → `npm run dev:token` để refresh (không phải lo
 ## Workflow tóm tắt
 
 1. **Code local** → `npm run dev` test trong browser (bridge mock)
-2. **Push lên GitHub** → Vercel auto build → `<project>.vercel.app`
+2. **Push lên GitHub** (⚠️ phải có **cả 2 branch `main` + `dev`** trước khi connect Vercel — xem [Branch convention](#branch-convention)) → Vercel auto build → `<project>.vercel.app`
 3. **Đăng ký vào Mushy** qua Admin Portal (https://admin.mini.mushy-app.com):
    - Slug + Tên + Preview URL (Vercel)
    - Auto-tạo CNAME Cloudflare cho prod custom domain
@@ -68,6 +68,27 @@ Token hết hạn sau 1h → `npm run dev:token` để refresh (không phải lo
 - `dev`  = preview (URL auto `*.vercel.app`)
 
 Standard Git flow: code daily trên `dev`, PR/merge `dev → main` để ship prod.
+
+### ⚠️ Trước khi connect Vercel: PHẢI có CẢ HAI `main` + `dev` trên GitHub
+
+Vercel tự gán branch duy nhất trong repo thành **Production Branch**. Nếu chỉ push `dev` trước:
+
+- Vercel coi `dev` là production → build với `VERCEL_ENV=production`
+- Mini-app query schema `app_{slug}` (PROD) thay vì `app_{slug}_dev`
+- Bật dev_mode trong Mushy → app **không thấy seed data dev** → trống
+
+**Fix**: tạo `main` placeholder trước (nếu chưa muốn ship prod thật), push cả 2 branch, sau đó mới connect Vercel.
+
+`npm run dev:setup` auto-detect khi thiếu `main` và offer tạo placeholder + push (orphan branch, không inherit commits của `dev`).
+
+Tự tay nếu cần:
+
+```bash
+git worktree add ../tmp-main --orphan main
+echo '<!doctype html><meta charset="utf-8"><title>🚧</title><body style="font-family:system-ui;display:grid;place-items:center;min-height:100vh;margin:0"><h1>🚧 Đang phát triển</h1></body>' > ../tmp-main/index.html
+(cd ../tmp-main && git add index.html && git commit -m "🚧 Placeholder main" && git push -u origin main)
+git worktree remove ../tmp-main
+```
 
 ## Stack cố định
 
