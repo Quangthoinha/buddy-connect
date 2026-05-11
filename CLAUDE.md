@@ -201,6 +201,7 @@ alter table app_{slug}.tablename replica identity full;
 | `realtime.js` | `subscribeToTable(table, workspaceId, cb)`, `subscribeBroadcast()` | Trả unsubscribe — gọi khi unmount! |
 | `queue.js` | `enqueue(jobType, payload)`, `onJob(jobId, cb)` | Tác vụ nặng async qua `public.job_queue` |
 | `mushy-api.js` | `mushyApi.push({...})` | Gateway sang superapp `mini-proxy` cho privileged op (push noti remote). User JWT auth — không cần service_role. |
+| `members.js` | `listMembers(workspaceId)`, `getProfiles(userIds)` | Batch lookup workspace members + display_name/avatar_url qua `dbPublic`. RLS workspace-mate đã mở (superapp mig 004). KHÔNG dùng hash-color fallback nữa. |
 | `theme.js` | `colors`, `radii`, `fonts`, `space`, `fontSize` | Inline style nếu cần |
 
 **Component sẵn có** (`src/components/`):
@@ -280,7 +281,8 @@ miniapp-{slug}/
 │       ├── storage.js
 │       ├── realtime.js
 │       ├── queue.js
-│       └── mushy-api.js      ← gateway sang superapp mini-proxy (push, …)
+│       ├── mushy-api.js      ← gateway sang superapp mini-proxy (push, …)
+│       └── members.js        ← batch lookup workspace members + profiles
 ├── api/                      ← Vercel Serverless Functions
 │   ├── _verify.js            ← verify JWT, KHÔNG expose endpoint
 │   └── ai-proxy.js           ← ví dụ: proxy AI request server-side
@@ -438,6 +440,7 @@ Cài app **Mushy** (TestFlight iOS / Play Internal Android) → mở app → **�
 - ❌ Native `<select>` HTML — dùng component `Select` từ `src/components/Select.jsx`
 - ❌ `window.__APP_CONTEXT__` trực tiếp — dùng `getContext()`
 - ❌ Hardcode domain — dùng env hoặc `window.location.origin`
+- ❌ Hash-color + chữ cái UUID làm avatar fallback — RLS workspace-mate đã mở (superapp mig 004). Dùng `listMembers()` / `getProfiles()` từ `src/lib/members.js` để lấy real `display_name` + `avatar_url`. Fallback chỉ khi `avatar_url == null` (user chưa upload).
 
 ### Security
 - ❌ Để API key trong code client (`VITE_*` là public!)
@@ -459,13 +462,14 @@ Khi user nói:
 - **"Cần table mới"** → viết migration `00X.sql` trong `migrations/` (chỉ `app_{slug}`), có RLS workspace_isolation, instruct user submit qua Admin Portal Reviewer. Nếu UI sẽ subscribe table này qua `subscribeToTable()` (vote count live, chat, presence, …) → **thêm `-- @realtime` trên dòng riêng ngay trước `create table`**. KHÔNG viết tay `alter publication` / `replica identity full` — Reviewer auto-append idempotent. Xem section 3.5.
 - **"Gọi AI"** → tạo `api/X-proxy.js` dùng `_verify.js`, set key Vercel env. Anti-injection: wrap input, force JSON, validate output.
 - **"Upload file"** → dùng `upload(file, folder)` từ `storage.js`, lưu `object_key` vào DB, `getViewUrl()` khi render.
-- **"Push notification"** → local (chỉ device user): `callNative('PUSH_NOTIFICATION', { title, body })` từ `bridge.js`. Remote (gửi cho members workspace): `mushyApi.push({ title, body, data?, userIds? })` từ `mushy-api.js` → superapp `mini-proxy` → Expo Push API.
+- **"Push notification"** → local (chỉ device user): `callNative('PUSH_NOTIFICATION', { title, body })` từ `bridge.js`. Remote (gửi cho members workspace): `mushyApi.push({ title, body, data?, userIds? })` từ `mushy-api.js` → superapp `mini-proxy` → Expo Push API. `data` cần `appSlug` để Shell deeplink vào mini-app khi tap noti (thêm `screen`, `recordId` nếu cần — Shell pass qua query params). `workspaceId` auto-inject từ ctx — không cần truyền tay. Xem jsdoc `src/lib/mushy-api.js`.
 - **"Tap-to-call số điện thoại"** → `bridge.tel('0901234567')`. Browser fallback tự `window.location = tel:...`.
 - **"Mở external link"** → `bridge.openUrl('https://...')` hoặc anchor `<a href="zalo://...">` (Shell route ra Linking tự động).
 - **"Share / Chia sẻ"** → `bridge.share({ title, message, url })` → native share sheet. Browser fallback navigator.share / clipboard.
 - **"Haptic / Rung phản hồi"** → `bridge.haptic('success'|'warning'|'error'|'light'|'medium'|'heavy'|'selection')`. Free UX win cho confirm/swipe action.
 - **"Quét QR"** → `bridge.scanQr()` → `{ data, type }`. Mở camera full-screen overlay trong Shell.
 - **"Xác thực sinh trắc / Face ID"** → `bridge.biometric({ promptMessage: 'Xác nhận' })` → `{ success }`. Gate action nhạy cảm. Browser luôn throw — mini-app phải có password fallback.
+- **"Hiện avatar / tên member"** (voter, comment author, mention, presence…) → `listMembers(ctx.workspaceId)` từ `src/lib/members.js` → `[{ user_id, role, display_name, avatar_url }, ...]`. Hoặc `getProfiles([uid1, uid2])` cho subset đã biết user_ids. KHÔNG dùng hash-color + chữ cái UUID — RLS workspace-mate đã cho phép real lookup (superapp migration 004).
 
 Memory bên Mushy chính (đọc nếu cần):
 - `project_environments.md` — kiến trúc dev/prod, schema-per-env, dev_mode
