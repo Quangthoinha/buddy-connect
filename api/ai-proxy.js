@@ -3,8 +3,10 @@
 //   header: Authorization: Bearer {token}, X-Workspace-Id: {workspaceId}
 //
 // Set env ở Vercel:
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  (verify token)
-//   GEMINI_API_KEY  (provider)
+//   GEMINI_API_KEY  (AI provider — secret thật, KHÔNG cho vào mushy.config.json)
+//
+// _verify.js dùng anon + user JWT (không cần service_role). URL + anon key
+// đọc từ mushy.config.json đã committed.
 
 import { verifyRequest } from './_verify.js';
 

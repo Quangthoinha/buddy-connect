@@ -1,5 +1,13 @@
 // Helper dùng chung cho các Vercel Function:
-// verify JWT từ Authorization header, trả về { userId, workspaceId, role }.
+// verify JWT từ Authorization header, trả về { userId, workspaceId, role, token }.
+//
+// KHÔNG dùng service_role — anon key + user JWT đủ:
+//   - auth.getUser(token) verify signature qua /auth/v1/user (anon được phép).
+//   - RLS trên workspace_members cho user đọc membership của chính họ.
+//
+// → Mini-app dev KHÔNG bao giờ cần SUPABASE_SERVICE_ROLE_KEY. Privileged ops
+//   (push, cross-user query) đi qua superapp's mini-proxy gateway — xem
+//   src/lib/mushy-api.js.
 //
 // Dùng:
 //   import { verifyRequest } from './_verify.js';
@@ -10,32 +18,34 @@
 //   }
 
 import { createClient } from '@supabase/supabase-js';
+// JSON import attribute — Vercel bundler traces ESM imports, đảm bảo
+// mushy.config.json được include vào deployment. Node 20.10+/22 hỗ trợ `with`.
+import config from '../mushy.config.json' with { type: 'json' };
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = config.supabase.url;
+const ANON_KEY = config.supabase.anonKey;
 
 export async function verifyRequest(req) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   const workspaceId = req.headers['x-workspace-id'];
   if (!token || !workspaceId) return null;
-  if (!SUPABASE_URL || !SERVICE_ROLE) {
-    throw new Error('SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY chưa set ở Vercel env');
-  }
 
-  const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
+  const client = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data, error } = await admin.auth.getUser(token);
-  if (error || !data?.user) return null;
 
-  const { data: member } = await admin
+  const { data: u, error } = await client.auth.getUser(token);
+  if (error || !u?.user) return null;
+
+  const { data: member } = await client
     .from('workspace_members')
     .select('role')
-    .eq('user_id', data.user.id)
     .eq('workspace_id', workspaceId)
+    .eq('user_id', u.user.id)
     .maybeSingle();
   if (!member) return null;
 
-  return { userId: data.user.id, workspaceId, role: member.role };
+  return { userId: u.user.id, workspaceId, role: member.role, token };
 }
