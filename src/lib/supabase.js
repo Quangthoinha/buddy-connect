@@ -38,13 +38,21 @@ if (slug.includes('REPLACE_WITH')) {
 
 function makeClient(schemaName) {
   const ctx = getContext();
-  return createClient(url, anonKey, {
+  const client = createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
       headers: ctx.token ? { Authorization: `Bearer ${ctx.token}` } : {},
     },
     db: { schema: schemaName },
   });
+  // Realtime dùng WebSocket riêng — KHÔNG share global.headers với REST.
+  // Không setAuth → Realtime treat sub là anon → RLS chặn → INSERT/UPDATE/DELETE
+  // event không deliver. setAuth attach token vào WS connection.
+  // Token expire sau ~1h → realtime cần re-subscribe sau khi refresh; xem realtime.js.
+  if (ctx.token) {
+    try { client.realtime.setAuth(ctx.token); } catch { /* older supabase-js */ }
+  }
+  return client;
 }
 
 let _appClient = null;

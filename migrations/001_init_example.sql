@@ -26,6 +26,12 @@
 -- =====================================================================
 
 -- ---------- Bảng tasks (ví dụ) ----------
+-- Để mini-app subscribe realtime cho table này: uncomment "-- @realtime" dòng
+-- dưới. Reviewer tự append ALTER PUBLICATION + REPLICA IDENTITY FULL idempotent
+-- vào cuối SQL khi apply (cả prod + dev schema). KHÔNG cần tự viết 2 DDL đó.
+-- Xem CLAUDE.md section 3.5.
+--
+-- -- @realtime
 create table if not exists app_demo.tasks (
   id            uuid primary key default gen_random_uuid(),
   workspace_id  uuid not null references public.workspaces(id) on delete cascade,
@@ -68,3 +74,13 @@ drop trigger if exists trg_tasks_updated_at on app_demo.tasks;
 create trigger trg_tasks_updated_at
   before update on app_demo.tasks
   for each row execute function app_demo.set_updated_at();
+
+-- ---------- Realtime opt-in ----------
+-- Đánh dấu bằng "-- @realtime" trên dòng riêng ngay TRƯỚC create table (xem
+-- ví dụ phía trên với app_demo.tasks). Reviewer auto-append:
+--   alter publication supabase_realtime add table <schema>.<table>;
+--   alter table <schema>.<table> replica identity full;
+-- vào cuối SQL khi apply (cho cả prod + dev schema).
+--
+-- KHÔNG opt-in mọi table — tốn WAL + Supabase Realtime quota. Chỉ table có UI
+-- live (vote, chat, presence...) mới cần.
