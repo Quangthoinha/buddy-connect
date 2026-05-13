@@ -35,9 +35,23 @@ const sb = createClient(SUPABASE_URL, ANON_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const email = await rl.question('Email: ');
-const password = await rl.question('Password: ');
-const { data, error } = await sb.auth.signInWithPassword({ email, password });
+// Mushy bỏ password (2026-05-12) — login qua OTP magic link.
+// Flow: signInWithOtp → user nhập mã 6 chữ số từ email → verifyOtp → session.
+const email = ((await rl.question('Email Mushy: ')) || '').trim().toLowerCase();
+if (!email || !email.includes('@')) { console.error('❌ Email không hợp lệ.'); process.exit(1); }
+
+console.log('Đang gửi mã OTP tới', email, '...');
+const { error: otpErr } = await sb.auth.signInWithOtp({
+  email,
+  options: { shouldCreateUser: false },
+});
+if (otpErr) { console.error('❌ Gửi OTP thất bại:', otpErr.message); process.exit(1); }
+console.log('✓ Đã gửi. Kiểm tra mail (kể cả Spam) — mã 6 chữ số.\n');
+
+const token = ((await rl.question('Mã OTP 6 chữ số: ')) || '').trim();
+if (!/^\d{6}$/.test(token)) { console.error('❌ Mã OTP phải đúng 6 chữ số.'); process.exit(1); }
+
+const { data, error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
 if (error) { console.error('❌', error.message); process.exit(1); }
 
 const lines = existsSync(envPath) ? readFileSync(envPath, 'utf8').split('\n') : [];
