@@ -45,6 +45,43 @@ declare -a SINGLE_FILES=(
   ".env.example"
 )
 
+# Pre-flight: detect file app-specific trong src/lib/ sẽ bị --delete.
+# rsync --delete xoá file ở destination KHÔNG có trong source. Nếu downstream
+# để auth.js, chat.js, weather.js, ... (app-specific) trong src/lib/, sẽ
+# bị xoá sạch. Print warning + abort nếu phát hiện, user phải:
+#   - Move file ra ngoài src/lib/ (vd src/lib/app/, src/app-lib/), HOẶC
+#   - Confirm bằng FORCE_DELETE=1 bash scripts/sync-template.sh ...
+declare -a EXTRA_FILES
+for d in "${FULL_DIRS[@]}"; do
+  if [ -d "$TEMPLATE_DIR/$d" ] && [ -d "$d" ]; then
+    while IFS= read -r f; do
+      rel="${f#$d/}"
+      [ "$d" = "scripts" ] && [ "$rel" = "sync-template.sh" ] && continue
+      if [ ! -e "$TEMPLATE_DIR/$d/$rel" ]; then
+        EXTRA_FILES+=("$f")
+      fi
+    done < <(find "$d" -type f 2>/dev/null)
+  fi
+done
+
+if [ ${#EXTRA_FILES[@]} -gt 0 ] && [ -z "${FORCE_DELETE:-}" ]; then
+  echo "" >&2
+  echo "⚠️  Pre-flight: phát hiện ${#EXTRA_FILES[@]} file app-specific trong shared dirs:" >&2
+  for f in "${EXTRA_FILES[@]}"; do echo "     - $f" >&2; done
+  echo "" >&2
+  echo "rsync --delete sẽ XOÁ các file này. Có 2 lựa chọn:" >&2
+  echo "" >&2
+  echo "  A) Move chúng ra ngoài src/lib/ (recommended):" >&2
+  echo "     mkdir -p src/lib/app  # hoặc src/app-lib/" >&2
+  echo "     mv <file> src/lib/app/   # cho mỗi file" >&2
+  echo "     Update import path trong App.jsx tương ứng." >&2
+  echo "" >&2
+  echo "  B) Confirm xoá (mất file vĩnh viễn — chắc chắn đã backup):" >&2
+  echo "     FORCE_DELETE=1 bash scripts/sync-template.sh $TEMPLATE_DIR" >&2
+  echo "" >&2
+  exit 1
+fi
+
 # Lib: sync toàn bộ (--delete để bỏ file template đã remove)
 for d in "${FULL_DIRS[@]}"; do
   if [ -d "$TEMPLATE_DIR/$d" ]; then
