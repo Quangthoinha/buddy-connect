@@ -5,6 +5,70 @@
 
 ---
 
+## 0. Cho người mới (vibe coder) — đọc 3 phút trước khi bắt đầu
+
+Mini-app Mushy giống như "tab Mini Program" trong Zalo/WeChat: là 1 web app nhỏ chạy bên trong app Mushy. Mỗi mini-app **của bạn** = 1 dự án riêng (1 repo GitHub + 1 project Vercel + 1 schema database).
+
+### 0.1 Ba môi trường — local, preview, prod
+
+| Môi trường | Khi nào chạy | URL | Schema database | Ai thấy được |
+|---|---|---|---|---|
+| **Local** | `npm run dev` trên máy bạn | `localhost:5173` (browser) | `app_{slug}_dev` (sandbox) | Chỉ mình bạn |
+| **Preview** | Push code lên branch `dev` → Vercel auto-deploy | `<project>.vercel.app` | `app_{slug}_dev` (cùng với local) | Bạn (qua dev_mode trong app Mushy) |
+| **Production** | Merge code vào branch `main` → Vercel auto-deploy | `{slug}.mini.mushy-app.com` | `app_{slug}` (real data) | Mọi người dùng app trong workspace |
+
+Quy tắc nhớ: **dev → an toàn, prod → cẩn thận**. Mặc định mọi thay đổi đều ở dev. Chỉ khi sẵn sàng → merge vào main → tự lên prod.
+
+### 0.2 Dev mode trong app Mushy là gì
+
+Mặc định khi user mở mini-app trong app Mushy, nó load **URL prod** (`{slug}.mini.mushy-app.com`). Bạn (mini-app owner) muốn xem **build dev** (URL preview Vercel) để test → bật **Dev Mode**:
+
+1. Mở app Mushy → **Cài đặt** (⚙ góc phải trên home)
+2. Tìm toggle "🛠️ Chế độ phát triển" → bật
+3. Quay lại home → tap mini-app của mình → giờ load URL preview Vercel
+
+Dev mode CHỈ ảnh hưởng mini-app **bạn own**. App của người khác vẫn load prod bình thường. Khi push noti từ mini-app trong dev mode → superapp tự chỉ gửi cho **bạn**, không spam team (xem 2.4).
+
+### 0.3 Migration là gì + khi nào cần
+
+Mini-app lưu data vào **database PostgreSQL** dùng chung với app Mushy. Mỗi mini-app có **schema riêng** (kiểu "namespace") tên là `app_{slug}` — vd mini-app slug `expense` → schema `app_expense`, có thể chứa tables `app_expense.transactions`, `app_expense.categories`, v.v.
+
+**Migration** = file SQL thay đổi schema (tạo bảng, thêm cột, thêm RLS, v.v.). Bạn cần migration khi:
+- Muốn lưu data vào database (lần đầu tạo mini-app → cần migration để tạo bảng)
+- Thêm tính năng mới cần cột/bảng mới
+- Sửa cấu trúc bảng (vd: rename cột, đổi kiểu data)
+
+**KHÔNG cần migration** cho thay đổi UI thuần (App.jsx, CSS, components — chỉ là code, deploy Vercel là xong).
+
+**Quy trình submit migration**:
+1. Viết SQL trong file `migrations/00X_xxx.sql` (vd `migrations/002_add_categories.sql`)
+2. Mở Admin Portal (https://admin.mini.mushy-app.com) → tab **Migrations**
+3. Chọn mini-app của bạn → paste SQL → **Submit & AI Review**
+4. AI review SQL (verify đúng convention) → nếu PASS → auto-apply cả prod + dev schema
+5. Nếu REJECT → đọc lý do, sửa, submit lại
+
+⚠️ **KHÔNG bao giờ apply SQL trực tiếp qua Supabase Dashboard SQL Editor.** Migration phải đi qua Admin Portal Reviewer (để verify + audit log + auto-duplicate sang dev schema).
+
+Chi tiết quy tắc viết migration ở section 3 + 8.4.
+
+### 0.4 Tóm tắt workflow vibe code
+
+```
+1. Clone template → đổi slug → npm install → npm run dev:setup
+   (Mushy account + OTP → workspace picker → ghi .env)
+2. Tạo workspace riêng của mình trong app Mushy (xem 8.1.4)
+3. Register mini-app trong Admin Portal (Private mode) — xem 8.2
+4. Code App.jsx, dùng db.from('table').select() — xem 3.4
+5. Thêm bảng? Viết migration → submit Admin Portal — xem 0.3 + 8.4
+6. Test local (browser) → push branch dev → preview Vercel + dev_mode
+7. OK → merge dev → main → prod live
+8. Sẵn sàng cho team khác? → đổi visibility Public — xem 8.6
+```
+
+Đọc 3 phút này rồi đọc tiếp section 1+ để hiểu chi tiết kỹ thuật.
+
+---
+
 ## 1. Mini-app là gì trong hệ Mushy
 
 Một **mini-app** = web app độc lập trong hệ Mushy Super App:
