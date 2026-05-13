@@ -71,6 +71,17 @@ Mini-app tự chọn schema theo `process.env.VERCEL_ENV` (Vercel inject sẵn l
 ### 2.3 dev_mode (read-only context)
 Mini-app đọc `ctx.userDevMode` + `ctx.isAppOwner` từ `getContext()`. Khi cả 2 = true, user đang xem preview build của app — có thể hiện badge `🛠 DEV` riêng nếu cần. Mặc định không bắt buộc làm gì.
 
+### 2.4 Push noti khi dev_mode — auto chỉ gửi cho owner
+
+Khi mini-app owner bật `dev_mode` ở Settings + đang test mini-app (qua preview build), **mọi remote push qua `mushyApi.push(...)` sẽ được superapp `mini-proxy` auto-filter chỉ gửi cho owner**, KHÔNG đẩy push cho members khác của workspace. Tránh noise (member thật bị spam noti từ build dev của owner).
+
+- Enforce ở **superapp mini-proxy Edge Function** — mini-app frontend không thể bypass.
+- Detect: caller có `user_profiles.dev_mode = true` AND `mini_apps.owner_id = caller.user_id` (lookup qua `data.appSlug`).
+- Filter logic: `userIds` từ mini-app bị override → push chỉ tới `[caller.user_id]`.
+- Local noti qua `callNative('PUSH_NOTIFICATION', ...)` (chỉ device user) KHÔNG bị filter — vốn đã chỉ tới device user rồi.
+
+→ Mini-app **không cần** check `userDevMode` trước khi gọi `mushyApi.push(...)`. Cứ gọi bình thường, superapp lo filtering.
+
 ---
 
 ## 3. Quy tắc Database (BẮT BUỘC)
