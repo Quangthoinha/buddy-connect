@@ -523,11 +523,32 @@ Mini-app downstream được **fork tại 1 thời điểm** từ template này 
 |---|---|
 | `src/App.jsx`, `src/App.css` | UI app của bạn |
 | `src/components/<của-bạn>.jsx` | Component app-specific (trừ Dialog/Select) |
-| `src/lib/<của-bạn>.js` (vd `notes.js`) | Helper riêng app |
+| `src/lib/app/*.js` hoặc `src/app-lib/*.js` | Helper riêng app — đặt SUBFOLDER để né `--delete` (xem 11.3.1) |
 | `migrations/*.sql` | Schema app riêng |
 | `mushy.config.json` | Slug khác nhau |
 | `package.json`, `vite.config.js`, `vercel.json` | Diff thủ công nếu nghi có dep mới |
 | `README.md` | Tự do viết |
+
+#### 11.3.1 ⚠️ Đừng để file app-specific TRỰC TIẾP trong `src/lib/`
+
+`sync-template.sh` chạy `rsync --delete` cho `src/lib/` — XOÁ mọi file ở destination không có ở source template. Nếu bạn để `src/lib/auth.js`, `src/lib/chat.js`, `src/lib/weather.js` (app-specific) trực tiếp trong `src/lib/`, **sẽ bị xoá khi sync**.
+
+**Convention đúng**: app-specific helper đặt trong SUBFOLDER `src/lib/app/` hoặc `src/app-lib/`:
+```
+src/lib/
+├── supabase.js       ← shared, sync overwrite OK
+├── bridge.js         ← shared
+├── realtime.js       ← shared
+├── storage.js        ← shared
+├── members.js        ← shared
+├── theme.css         ← shared
+└── app/              ← ← app-specific, KHÔNG bị --delete touch
+    ├── auth.js
+    ├── chat.js
+    └── weather.js
+```
+
+`sync-template.sh` có **pre-flight check** — nếu detect file ngoài template trong `src/lib/`, abort + in danh sách. User phải move ra subfolder hoặc confirm `FORCE_DELETE=1` (rủi ro tự chịu).
 
 ### 11.4 Cách sync (khuyến nghị)
 
