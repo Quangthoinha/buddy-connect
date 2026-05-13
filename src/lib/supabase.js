@@ -67,6 +67,19 @@ export function getPublicSupabase() {
   return _publicClient;
 }
 
+// Clear cache buộc next getSupabase() / getPublicSupabase() recreate client.
+// Dùng khi token refresh: REST client capture token vào global.headers lúc
+// create — không update được sau, phải recreate. Realtime setAuth thì khác,
+// support runtime update (xem realtime.js refreshAuth).
+//
+// Caller (vd auth.js của miniapp-admin web khi onAuthStateChange fire token
+// refresh): gọi resetSupabaseClients() để clear cache → các query sau dùng
+// token mới.
+export function resetSupabaseClients() {
+  _appClient = null;
+  _publicClient = null;
+}
+
 // Shortcut: db.from('tasks').select(...)  → app_{slug}.tasks
 export const db = new Proxy({}, {
   get(_, prop) {
