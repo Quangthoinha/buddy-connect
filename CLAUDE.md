@@ -475,3 +475,104 @@ Memory bên Mushy chính (đọc nếu cần):
 - `project_environments.md` — kiến trúc dev/prod, schema-per-env, dev_mode
 - `project_domain.md` — quy ước domain
 - `project_milestones.md` — state hiện tại
+
+---
+
+## 11. Cập nhật template định kỳ (BẮT BUỘC làm hàng tháng)
+
+Mini-app downstream được **fork tại 1 thời điểm** từ template này — sau đó shared infra trong template (lib, bridge types, helpers, RLS adjustment, Dialog, theme, _verify.js…) sẽ phát triển tiếp ở **Mushy canonical**, không tự đẩy về downstream. Bug fix + feature mới ở shared layer chỉ có khi **bạn pull về tay**.
+
+### 11.1 Khi nào cần sync
+
+- **Định kỳ**: 2-4 tuần/lần (đặt nhắc Calendar). Nhanh — script auto + diff vài phút.
+- **Khẩn**: khi
+  - Team thông báo có bridge type mới (`bridge.somethingNew()`)
+  - `mushyApi`/`members.js` lỗi 401/RLS sau khi superapp update
+  - Supabase RPC mới được mention trong PR Mushy chính
+  - Bug được fix ở `_verify.js` / `supabase.js` / `realtime.js`
+
+### 11.2 Cái gì SYNC (shared infra — xem như kim cương, đừng sửa downstream)
+
+| Path | Lý do |
+|---|---|
+| `src/lib/*` | Bridge, supabase, storage, realtime, queue, mushy-api, members, theme — toàn bộ |
+| `src/components/Dialog.jsx` | Design system primitive |
+| `src/components/Select.jsx` | Design system primitive (replace native `<select>`) |
+| `api/_verify.js` | JWT verification logic |
+| `scripts/setup.js` `seed.js` `refresh-token.js` | DEV onboarding flow |
+| `.env.example` | Có thể có biến mới |
+| `CLAUDE.md` | Quy tắc + bridge reference (script tự copy nếu khác) |
+
+### 11.3 Cái gì KHÔNG sync (app-specific)
+
+| Path | Lý do |
+|---|---|
+| `src/App.jsx`, `src/App.css` | UI app của bạn |
+| `src/components/<của-bạn>.jsx` | Component app-specific (trừ Dialog/Select) |
+| `src/lib/<của-bạn>.js` (vd `notes.js`) | Helper riêng app |
+| `migrations/*.sql` | Schema app riêng |
+| `mushy.config.json` | Slug khác nhau |
+| `package.json`, `vite.config.js`, `vercel.json` | Diff thủ công nếu nghi có dep mới |
+| `README.md` | Tự do viết |
+
+### 11.4 Cách sync (khuyến nghị)
+
+```bash
+# 1. Clone Mushy canonical về tạm (lần đầu, hoặc rm -rf rồi clone lại)
+git clone https://github.com/anhdqvn/mushy.git /tmp/mushy-latest
+# (hoặc git -C /tmp/mushy-latest pull nếu đã có)
+
+# 2. Trong project mini-app downstream, branch riêng để review
+cd ~/miniapp-{your-slug}
+git checkout dev && git pull
+git checkout -b sync-template-$(date +%Y%m%d)
+
+# 3. Run sync script (đã ship trong template)
+bash scripts/sync-template.sh /tmp/mushy-latest/miniapp-template
+
+# 4. Review thay đổi
+git status
+git diff --stat
+git diff src/lib/    # spot-check shared lib
+
+# 5. Diff package.json bằng tay nếu nghi có dep mới
+diff /tmp/mushy-latest/miniapp-template/package.json package.json
+# Nếu thấy thêm dep cần thiết → npm install <pkg>@<version>
+
+# 6. Test
+npm install
+npm run dev:setup    # refresh token + verify lib mới còn login OK
+npm run dev          # smoke test UI
+
+# 7. Push + PR vào dev
+git push -u origin sync-template-$(date +%Y%m%d)
+# Tạo PR trên GitHub: base=dev, compare=sync-template-...
+# Review xong merge → dev → main như flow thường
+```
+
+### 11.5 Theo dõi changelog (xem có gì mới đáng sync)
+
+```bash
+# Tại Mushy canonical clone (/tmp/mushy-latest):
+git log --oneline --since="1 month ago" -- miniapp-template/
+# Hoặc filter cụ thể shared infra:
+git log --oneline --since="1 month ago" -- \
+  miniapp-template/src/lib \
+  miniapp-template/api/_verify.js \
+  miniapp-template/scripts \
+  miniapp-template/CLAUDE.md
+```
+
+### 11.6 Conflict thường gặp + cách xử
+
+- **`src/lib/supabase.js` đã custom local** (vd add helper riêng): KHÔNG nên — move helper riêng sang `src/lib/<your-app>.js`. Nếu lỡ sửa → backup trước sync rồi merge tay.
+- **`scripts/setup.js` đổi prompt**: thường chỉ là copy text mới hoặc thêm bước. Diff trước, accept nếu hợp lý.
+- **`.env.example` có biến mới**: copy biến mới sang `.env` thực + điền giá trị (vd nhờ admin nếu là token).
+- **`CLAUDE.md` thay đổi quy tắc** (vd RLS mới, bridge type mới): đọc kỹ section thay đổi, áp dụng vào code app nếu cần (vd thay native `<select>` còn sót → `Select` component).
+
+### 11.7 Anti-pattern khi sync
+
+- ❌ Skip sync 6+ tháng → khi cần upgrade gặp 50 conflict + 5 breaking changes cùng lúc
+- ❌ Sửa `src/lib/*` để fix bug local → patch lost khi sync. **Bug ở shared layer phải fix ở Mushy canonical + sync về.**
+- ❌ Merge thẳng vào main bỏ qua test — sync có thể đụng RLS / bridge breaking → smoke test bắt buộc
+- ❌ Xóa `scripts/sync-template.sh` ở downstream — script tự exclude khỏi sync để bạn upgrade được lần sau
