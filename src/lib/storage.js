@@ -23,9 +23,14 @@ import config from '../../mushy.config.json';
 
 const useR2 = import.meta.env.VITE_USE_R2 === 'true';
 const slug = config.slug;
-const env = import.meta.env.VITE_APP_ENV || 'prod';
+// __VERCEL_ENV__ build-time constant (vite.config.js define) — đồng bộ với
+// supabase.js + realtime.js. Trước dùng import.meta.env.VITE_APP_ENV nhưng
+// vite.config.js KHÔNG define → undefined → fallback 'prod' → file dev
+// upload vào path KHÔNG có dev/ prefix → trộn với file prod.
+// eslint-disable-next-line no-undef
+const vercelEnv = typeof __VERCEL_ENV__ !== 'undefined' ? __VERCEL_ENV__ : 'development';
 const BUCKET = `miniapp-${slug}`;
-const ENV_PREFIX = env === 'dev' ? 'dev/' : '';
+const ENV_PREFIX = vercelEnv === 'production' ? '' : 'dev/';
 
 const urlCache = new Map(); // objectKey → { url, expiresAt }
 

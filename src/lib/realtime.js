@@ -29,9 +29,15 @@ import { getContext } from './context.js';
 import config from '../../mushy.config.json';
 
 const slug = config.slug;
-const env = import.meta.env.VITE_APP_ENV || 'prod';
+// __VERCEL_ENV__ build-time constant (vite.config.js define) — đồng bộ với
+// src/lib/supabase.js. Trước đây dùng import.meta.env.VITE_APP_ENV nhưng
+// vite.config.js KHÔNG define VITE_APP_ENV → undefined → fallback 'prod' →
+// realtime sub schema PROD trên local/preview → silent bug (REST query dev,
+// realtime nhận event prod khác workspace).
+// eslint-disable-next-line no-undef
+const vercelEnv = typeof __VERCEL_ENV__ !== 'undefined' ? __VERCEL_ENV__ : 'development';
 const schemaSlug = slug.replace(/-/g, '_');
-const schema = env === 'dev' ? `app_${schemaSlug}_dev` : `app_${schemaSlug}`;
+const schema = vercelEnv === 'production' ? `app_${schemaSlug}` : `app_${schemaSlug}_dev`;
 
 // Re-attach token trước subscribe — phòng trường hợp token đã refresh
 // sau khi client được tạo lần đầu.
