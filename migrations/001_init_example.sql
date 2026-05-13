@@ -10,8 +10,24 @@
 -- mini-app (cùng grants + default privileges). Migration KHÔNG cần CREATE
 -- SCHEMA hay GRANT — chỉ tập trung vào tables, indexes, RLS policies, triggers.
 --
--- Migration Reviewer auto duplicate file này sang schema sandbox (suffix
--- _dev) khi apply atomic — chỉ viết cho schema chính.
+-- ╔═══════════════════════════════════════════════════════════════════╗
+-- ║ ⚠️  TUYỆT ĐỐI KHÔNG VIẾT TAY `_dev` TRONG MIGRATION SQL.           ║
+-- ║                                                                   ║
+-- ║ Slug = "lunch-plan" → schema PROD = `app_lunch_plan` (DUY NHẤT     ║
+-- ║ tên xuất hiện trong file SQL). Reviewer apply 2 lần atomic:        ║
+-- ║   1. PROD: chạy nguyên SQL với `app_lunch_plan.xxx`                ║
+-- ║   2. DEV:  regex-replace whole-word → `app_lunch_plan_dev.xxx`     ║
+-- ║                                                                   ║
+-- ║ Nếu bạn viết tay `app_lunch_plan_dev`, regex-replace lần 2 sẽ      ║
+-- ║ ra `app_lunch_plan_dev_dev` → schema sai → migration fail.         ║
+-- ║                                                                   ║
+-- ║ Reviewer DETECT trước khi apply: thấy chuỗi `_dev` sau tên schema  ║
+-- ║ → REJECT. Lỗi user gặp: "SQL có ref 'app_{slug}_dev' — KHÔNG viết  ║
+-- ║ tay _dev, Reviewer tự duplicate sau khi apply prod."               ║
+-- ║                                                                   ║
+-- ║ ❌ create table app_lunch_plan_dev.tasks (...);                    ║
+-- ║ ✅ create table app_lunch_plan.tasks (...);                        ║
+-- ╚═══════════════════════════════════════════════════════════════════╝
 --
 -- Checklist (Migration Reviewer sẽ verify):
 --   [x] Mọi table có `workspace_id uuid not null`
