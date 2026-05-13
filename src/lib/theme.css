@@ -64,6 +64,14 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Chặn pinch-zoom + double-tap zoom (kết hợp với meta viewport
+     maximum-scale=1.0 trong index.html). Mini-app layout đã optimize
+     mobile + WebView in-shell, zoom làm UI vỡ + iOS tự zoom focus input.
+     touch-action: manipulation = cho phép tap/swipe nhưng disable
+     pinch + double-tap zoom. */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
