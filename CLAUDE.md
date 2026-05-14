@@ -5,6 +5,29 @@
 
 ---
 
+## ⛔ CRITICAL — Template là READ-ONLY cho mini-app dev
+
+**Nếu bạn đang đọc file này trong 1 repo clone từ template** (tên kiểu `miniapp-{slug}` hoặc bất cứ repo nào KHÔNG phải `mushy/miniapp-template`):
+
+- ❌ **TUYỆT ĐỐI KHÔNG** commit thay đổi shared infra (`src/lib/*`, `api/_verify.js`, `scripts/*`, `CLAUDE.md`, `.env.example`) rồi push **NGƯỢC** về repo template canonical.
+- ❌ **TUYỆT ĐỐI KHÔNG** tạo PR từ mini-app repo về `mushy/miniapp-template`.
+- ❌ **TUYỆT ĐỐI KHÔNG** chạy `git remote add` thêm remote pointing tới template để push.
+- ✅ Template là **upstream READ-ONLY** — chỉ kéo về (`scripts/sync-template.sh`), không bao giờ đẩy ngược.
+
+**Tại sao**: Template là single-source-of-truth cho **mọi** mini-app trong hệ Mushy (hiện có nhiều mini-app downstream cùng pull về). Mỗi mini-app có nhu cầu app-specific khác nhau — nếu mini-app `lunch-plan` push thay đổi local về template, mini-app `expense` pull về sẽ ăn cái thay đổi đó dù không cần. Hoặc tệ hơn: push thay đổi phá compatibility cho mini-app khác.
+
+**Quy tắc fix bug ở shared layer**:
+1. Reproduce bug ở 1 mini-app downstream.
+2. Mở issue / báo team Mushy canonical (anhdqvn).
+3. Fix được apply ở repo `mushy/miniapp-template` (do team canonical).
+4. Mini-app downstream pull về qua `scripts/sync-template.sh` (xem section 11).
+
+**Nếu bạn là Claude đang vibe code mini-app**: chỉ sửa `src/App.jsx`, `src/components/<app-specific>`, `src/lib/app/*`, `migrations/*`, `api/<app-specific>.js`, `mushy.config.json`, `package.json` (thêm dep app cần). KHÔNG đụng các file trong section 11.2 "Cái gì SYNC". Nếu phải fix shared infra để app chạy được, báo dev — đừng tự sửa rồi push.
+
+**Nếu bạn đang sửa repo template canonical** (`mushy/miniapp-template` ở GitHub user `anhdqvn`): mục này không áp dụng — bạn đang ở upstream, sửa thoải mái.
+
+---
+
 ## 0. Cho người mới (vibe coder) — đọc 3 phút trước khi bắt đầu
 
 Mini-app Mushy giống như "tab Mini Program" trong Zalo/WeChat: là 1 web app nhỏ chạy bên trong app Mushy. Mỗi mini-app **của bạn** = 1 dự án riêng (1 repo GitHub + 1 project Vercel + 1 schema database).
@@ -717,7 +740,19 @@ git log --oneline --since="1 month ago" -- \
 - **`.env.example` có biến mới**: copy biến mới sang `.env` thực + điền giá trị (vd nhờ admin nếu là token).
 - **`CLAUDE.md` thay đổi quy tắc** (vd RLS mới, bridge type mới): đọc kỹ section thay đổi, áp dụng vào code app nếu cần (vd thay native `<select>` còn sót → `Select` component).
 
-### 11.7 Anti-pattern khi sync
+### 11.7 ❌ KHÔNG push ngược về template
+
+Sync là **MỘT CHIỀU**: template → mini-app downstream. KHÔNG được làm ngược lại.
+
+- ❌ KHÔNG `git remote add upstream https://github.com/anhdqvn/mushy.git` rồi push từ mini-app repo lên path `miniapp-template/`.
+- ❌ KHÔNG mở PR từ mini-app GitHub repo về `mushy/miniapp-template`.
+- ❌ KHÔNG copy file từ mini-app về local clone của template rồi commit.
+
+Lý do: nhiều mini-app khác cùng pull từ template. Push ngược = áp đặt 1 mini-app's choice lên mọi mini-app khác.
+
+Cần fix shared infra → báo team Mushy canonical (anhdqvn) qua issue / chat. Fix được apply ở template canonical, mini-app downstream pull về như thường.
+
+### 11.8 Anti-pattern khi sync
 
 - ❌ Skip sync 6+ tháng → khi cần upgrade gặp 50 conflict + 5 breaking changes cùng lúc
 - ❌ Sửa `src/lib/*` để fix bug local → patch lost khi sync. **Bug ở shared layer phải fix ở Mushy canonical + sync về.**
