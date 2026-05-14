@@ -54,7 +54,7 @@ Token hết hạn sau 1h → `npm run dev:token` để refresh (không phải lo
 ## Workflow tóm tắt
 
 1. **Code local** → `npm run dev` test trong browser (bridge mock)
-2. **Push lên GitHub** (⚠️ phải có **cả 2 branch `main` + `dev`** trước khi connect Vercel — xem [Branch convention](#branch-convention)) → Vercel auto build → `<project>.vercel.app`
+2. **Push lên GitHub** (⚠️ phải có **cả 2 branch `main` + `dev`** trước khi connect Vercel — xem [Branch convention](#branch-convention)) → Vercel project/preview alias chuẩn `https://mushy-miniapp-{slug}.vercel.app`
 3. **Đăng ký vào Mushy** qua Admin Portal (https://admin.mini.mushy-app.com):
    - Slug + Tên + Preview URL (Vercel)
    - Auto-tạo CNAME Cloudflare cho prod custom domain
@@ -65,7 +65,7 @@ Token hết hạn sau 1h → `npm run dev:token` để refresh (không phải lo
 ## Branch convention
 
 - `main` = production (custom domain `{slug}.mini.mushy-app.com`)
-- `dev`  = preview (URL auto `*.vercel.app`)
+- `dev`  = preview (URL chuẩn `https://mushy-miniapp-{slug}.vercel.app`)
 
 Standard Git flow: code daily trên `dev`, PR/merge `dev → main` để ship prod.
 

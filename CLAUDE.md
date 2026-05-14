@@ -449,7 +449,7 @@ Sau khi đăng ký account Mushy (8.1.3) hoặc login bằng account có sẵn:
 
    Nếu chưa muốn ship prod thật: tạo `main` với placeholder HTML "🚧 Đang phát triển". `npm run dev:setup` auto-detect khi thiếu `main` và offer tạo placeholder + push lên origin (dùng orphan branch — KHÔNG inherit commits của `dev`, main hoàn toàn rỗng + 1 file placeholder).
 
-2. Connect Vercel → tự auto-build → có URL `<project>.vercel.app`
+2. Connect Vercel với project name chuẩn `mushy-miniapp-{slug}` → preview alias chuẩn `https://mushy-miniapp-{slug}.vercel.app`
 3. Set Vercel env vars (chỉ server-side, KHÔNG `VITE_` prefix) — **cả 2 scope** Production + Preview:
    - AI provider keys nếu mini-app dùng (`GEMINI_API_KEY`, `OPENAI_API_KEY`, vv)
 
@@ -465,15 +465,15 @@ Sau khi đăng ký account Mushy (8.1.3) hoặc login bằng account có sẵn:
 
    | Alias | Branch cần gán | Bước thao tác |
    |---|---|---|
-   | `<project>.vercel.app` (auto-gán bởi Vercel) | **dev** (Preview) | Click row → Edit → **Git Branch: `dev`** → Save. Mặc định Vercel gán Production — phải đổi tay. Đây là URL preview_url sẽ paste vào admin portal ở bước 6. |
+   | `mushy-miniapp-{slug}.vercel.app` (preview alias chuẩn) | **dev** (Preview) | Project name/alias phải theo format `mushy-miniapp-{slug}`. Click row → Edit → **Git Branch: `dev`** → Save. Mặc định Vercel có thể gán Production — phải đổi tay. Đây là URL preview_url sẽ paste vào admin portal ở bước 6. |
    | `{slug}.mini.mushy-app.com` (custom domain prod) | **main** (Production) | Add domain → assign Git Branch = `main` → Save. Đợi DNS verify (CNAME đã được admin portal auto-tạo ở bước 7). |
 
-   ⚠️ **Bước này chết người nếu sai.** Mặc định Vercel để `<project>.vercel.app` cho Production branch — nếu không đổi sang `dev`, bật dev_mode trong superapp vẫn load build production → query schema prod → **toàn bộ tách dev/prod vô nghĩa**.
+   ⚠️ **Bước này chết người nếu sai.** Preview URL phải là `https://mushy-miniapp-{slug}.vercel.app` và phải trỏ branch `dev`. Nếu alias trỏ Production, bật dev_mode trong superapp vẫn load build production → query schema prod → **toàn bộ tách dev/prod vô nghĩa**.
 
 6. Mở Admin Portal (https://admin.mini.mushy-app.com) → login → catalog → **+ Đăng ký app mới**:
    - Slug: `{slug}` (uniqueness check live)
    - Tên + mô tả + icon
-   - **Preview URL**: paste `https://<project>.vercel.app` (sau khi đã re-assign sang branch dev ở bước 5)
+   - **Preview URL**: paste `https://mushy-miniapp-{slug}.vercel.app` (sau khi đã re-assign sang branch dev ở bước 5)
    - Production URL: **auto-generated** từ slug → `https://{slug}.mini.mushy-app.com` (KHÔNG cho user nhập)
    - Visibility: **Private** (default — chỉ owner thấy) hoặc **Public** (mọi ws thấy + ws owner enable)
 
@@ -484,7 +484,7 @@ Sau khi đăng ký account Mushy (8.1.3) hoặc login bằng account có sẵn:
 ### 8.3 Quy ước branch + git flow
 
 - `main` = production (canonical, stable). Push lên main → Vercel deploy custom domain.
-- `dev` = development/preview. Push lên dev → Vercel deploy `*.vercel.app`.
+- `dev` = development/preview. Push lên dev → Vercel deploy preview alias `https://mushy-miniapp-{slug}.vercel.app`.
 - Standard Git flow: code daily trên `dev` → PR/merge `dev → main` để ship prod.
 
 ### 8.4 Submit migration mới
@@ -565,7 +565,7 @@ Sau khi đăng ký account Mushy (8.1.3) hoặc login bằng account có sẵn:
 
 ### Deploy / Vercel
 - ❌ Connect Vercel khi repo chỉ có 1 branch (vd chỉ `dev`, chưa có `main`) — Vercel auto-promote branch duy nhất thành Production Branch → code dev build với `VERCEL_ENV=production` → query schema prod thay vì dev → toàn bộ tách schema dev/prod vô nghĩa. Luôn push cả `main` + `dev` trước khi connect (xem 8.2 bước 1). `npm run dev:setup` auto-check.
-- ❌ Để Vercel auto-assign alias `<project>.vercel.app` cho Production Branch (mặc định) — phải re-assign sang branch `dev` ở Settings → Domains (xem 8.2 bước 5). Bỏ qua = dev_mode load build prod, schema prod, hết cứu.
+- ❌ Dùng URL Vercel lệch chuẩn hoặc để alias `mushy-miniapp-{slug}.vercel.app` trỏ Production Branch — project/preview alias phải theo format `mushy-miniapp-{slug}` và re-assign sang branch `dev` ở Settings → Domains (xem 8.2 bước 5). Bỏ qua = dev_mode load build prod, schema prod, hết cứu.
 
 ---
 
