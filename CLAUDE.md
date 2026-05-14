@@ -14,14 +14,14 @@ Mini-app Mushy giống như "tab Mini Program" trong Zalo/WeChat: là 1 web app 
 | Môi trường | Khi nào chạy | URL | Schema database | Ai thấy được |
 |---|---|---|---|---|
 | **Local** | `npm run dev` trên máy bạn | `localhost:5173` (browser) | `app_{slug}_dev` (sandbox) | Chỉ mình bạn |
-| **Preview** | Push code lên branch `dev` → Vercel auto-deploy | `<project>.vercel.app` | `app_{slug}_dev` (cùng với local) | Bạn (qua dev_mode trong app Mushy) |
-| **Production** | Merge code vào branch `main` → Vercel auto-deploy | `{slug}.mini.mushy-app.com` | `app_{slug}` (real data) | Mọi người dùng app trong workspace |
+| **Preview** | Push code lên branch `dev` → Vercel auto-deploy | `mushy-miniapp-{slug}-git-dev.vercel.app` | `app_{slug}_dev` (cùng với local) | Bạn (qua dev_mode trong app Mushy) |
+| **Production** | Merge code vào branch `main` → Vercel auto-deploy | `mushy-miniapp-{slug}.vercel.app` | `app_{slug}` (real data) | Mọi người dùng app trong workspace |
 
 Quy tắc nhớ: **dev → an toàn, prod → cẩn thận**. Mặc định mọi thay đổi đều ở dev. Chỉ khi sẵn sàng → merge vào main → tự lên prod.
 
 ### 0.2 Dev mode trong app Mushy là gì
 
-Mặc định khi user mở mini-app trong app Mushy, nó load **URL prod** (`{slug}.mini.mushy-app.com`). Bạn (mini-app owner) muốn xem **build dev** (URL preview Vercel) để test → bật **Dev Mode**:
+Mặc định khi user mở mini-app trong app Mushy, nó load **URL prod** (`mushy-miniapp-{slug}.vercel.app`). Bạn (mini-app owner) muốn xem **build dev** (URL preview Vercel `mushy-miniapp-{slug}-git-dev.vercel.app`) để test → bật **Dev Mode**:
 
 1. Mở app Mushy → **Cài đặt** (⚙ góc phải trên home)
 2. Tìm toggle "🛠️ Chế độ phát triển" → bật
@@ -396,8 +396,8 @@ npm run dev             # localhost:5173 (browser, có bridge mock)
 ### 8.1.1 `npm run dev:setup` — flow auto-config local DEV
 
 Script tự động:
-1. **Hỏi email + password** Mushy (đăng ký + tạo workspace trên app Mushy trước nếu chưa có — xem 8.1.3)
-2. **Login** qua Supabase Auth → lấy JWT access token (1h expiry)
+1. **Hỏi email** Mushy → server gửi OTP 6 chữ số qua mail
+2. **Nhập OTP** từ mail → verify → lấy JWT access token (1h expiry)
 3. **List workspace** bạn là member → bạn chọn 1
 4. **Auto ghi 4 biến** vào `.env`:
    - `VITE_DEV_TOKEN` — JWT access token (mock cho `getContext()`)
@@ -449,7 +449,11 @@ Sau khi đăng ký account Mushy (8.1.3) hoặc login bằng account có sẵn:
 
    Nếu chưa muốn ship prod thật: tạo `main` với placeholder HTML "🚧 Đang phát triển". `npm run dev:setup` auto-detect khi thiếu `main` và offer tạo placeholder + push lên origin (dùng orphan branch — KHÔNG inherit commits của `dev`, main hoàn toàn rỗng + 1 file placeholder).
 
-2. Connect Vercel với project name chuẩn `mushy-miniapp-{slug}` → preview alias chuẩn `https://mushy-miniapp-{slug}.vercel.app`
+2. Connect Vercel (tài khoản của bạn) → import GitHub repo → **đổi project name = `mushy-miniapp-{slug}`** ở Vercel UI. Vercel auto-build:
+   - Branch `main` → `https://mushy-miniapp-{slug}.vercel.app` (production)
+   - Branch `dev` → `https://mushy-miniapp-{slug}-git-dev.vercel.app` (preview, branch alias)
+
+   Project name chuẩn = URL predict được, dễ paste vào Admin Portal.
 3. Set Vercel env vars (chỉ server-side, KHÔNG `VITE_` prefix) — **cả 2 scope** Production + Preview:
    - AI provider keys nếu mini-app dùng (`GEMINI_API_KEY`, `OPENAI_API_KEY`, vv)
 
@@ -461,31 +465,39 @@ Sau khi đăng ký account Mushy (8.1.3) hoặc login bằng account có sẵn:
    - **Vercel Authentication**: đổi sang **Disabled** → Save.
    - Lý do: mặc định Vercel chặn preview deployment bằng SSO. Superapp WebView không có session Vercel → 401, dev_mode vô dụng. Mushy = internal team, RLS Supabase đã bảo vệ data → không cần SSO layer này.
 
-5. **Vercel Settings → Domains** — gán đúng branch cho 2 alias:
+5. **2 stable URLs Vercel** (auto, không cần Cloudflare custom domain):
 
-   | Alias | Branch cần gán | Bước thao tác |
+   | Branch | URL stable | Vai trò trong Mushy |
    |---|---|---|
-   | `mushy-miniapp-{slug}.vercel.app` (preview alias chuẩn) | **dev** (Preview) | Project name/alias phải theo format `mushy-miniapp-{slug}`. Click row → Edit → **Git Branch: `dev`** → Save. Mặc định Vercel có thể gán Production — phải đổi tay. Đây là URL preview_url sẽ paste vào admin portal ở bước 6. |
-   | `{slug}.mini.mushy-app.com` (custom domain prod) | **main** (Production) | Add domain → assign Git Branch = `main` → Save. Đợi DNS verify (CNAME đã được admin portal auto-tạo ở bước 7). |
+   | `main` | `mushy-miniapp-{slug}.vercel.app` | Production — paste vào `url` ở Admin Portal |
+   | `dev`  | `mushy-miniapp-{slug}-git-dev.vercel.app` | Preview (dev_mode) — paste vào `preview_url` ở Admin Portal |
 
-   ⚠️ **Bước này chết người nếu sai.** Preview URL phải là `https://mushy-miniapp-{slug}.vercel.app` và phải trỏ branch `dev`. Nếu alias trỏ Production, bật dev_mode trong superapp vẫn load build production → query schema prod → **toàn bộ tách dev/prod vô nghĩa**.
+   Vercel auto-tạo 2 URL khi push lên 2 branch tương ứng. **Stable per branch** (không phải per-commit). Mỗi push lên branch tương ứng → cùng URL update sang deploy mới.
+
+   **KHÔNG paste** per-deployment URL random kiểu `mushy-miniapp-{slug}-abc123.vercel.app` — đổi theo commit, không stable.
+
+   ℹ️ Optional: nếu muốn URL branded `{slug}.mini.mushy-app.com`, nhờ anhdqvn manual add Cloudflare CNAME + Vercel custom domain. Default flow KHÔNG yêu cầu — `*.vercel.app` đủ dùng cho mọi mini-app (WebView không show URL bar, user không thấy).
 
 6. Mở Admin Portal (https://admin.mini.mushy-app.com) → login → catalog → **+ Đăng ký app mới**:
    - Slug: `{slug}` (uniqueness check live)
    - Tên + mô tả + icon
-   - **Preview URL**: paste `https://mushy-miniapp-{slug}.vercel.app` (sau khi đã re-assign sang branch dev ở bước 5)
-   - Production URL: **auto-generated** từ slug → `https://{slug}.mini.mushy-app.com` (KHÔNG cho user nhập)
+   - **Production URL**: paste `https://mushy-miniapp-{slug}.vercel.app`
+   - **Preview URL**: paste `https://mushy-miniapp-{slug}-git-dev.vercel.app`
    - Visibility: **Private** (default — chỉ owner thấy) hoặc **Public** (mọi ws thấy + ws owner enable)
 
-7. Submit → admin portal **auto-tạo CNAME Cloudflare** `{slug}.mini` → `cname.vercel-dns.com`. Quay lại bước 5 để add custom domain prod nếu chưa làm.
+7. Submit → admin portal auto-provision **bucket storage** (`miniapp-{slug}`) + **2 schemas DB** (`app_{slug}`, `app_{slug}_dev`) + **expose Data API**.
 
-ℹ️ **Sau khi đổi Vercel setting** (Auth, Domain alias, env): Vercel Edge cache + Expo Go WebView cache có thể giữ response cũ vài phút. Nếu trong Expo Go thấy 403/401 mặc dù đã sửa: curl URL trên máy local trước (xác nhận Vercel trả 200), rồi **swipe Expo Go khỏi recent apps** + mở lại. Đừng vội nghi ngờ logic.
+   KHÔNG còn auto-tạo Cloudflare CNAME (chuyển sang manual nếu cần branded domain). Custom domain `*.mini.mushy-app.com` không bắt buộc.
+
+ℹ️ **Sau khi đổi Vercel setting** (Auth, env): Vercel Edge cache + Expo Go WebView cache có thể giữ response cũ vài phút. Nếu trong Expo Go thấy 403/401 mặc dù đã sửa: curl URL trên máy local trước (xác nhận Vercel trả 200), rồi **swipe Expo Go khỏi recent apps** + mở lại. Đừng vội nghi ngờ logic.
 
 ### 8.3 Quy ước branch + git flow
 
-- `main` = production (canonical, stable). Push lên main → Vercel deploy custom domain.
-- `dev` = development/preview. Push lên dev → Vercel deploy preview alias `https://mushy-miniapp-{slug}.vercel.app`.
+- `main` = production (canonical, stable). Push lên main → Vercel deploy `mushy-miniapp-{slug}.vercel.app`.
+- `dev` = development/preview. Push lên dev → Vercel deploy `mushy-miniapp-{slug}-git-dev.vercel.app`.
 - Standard Git flow: code daily trên `dev` → PR/merge `dev → main` để ship prod.
+
+Cả 2 URL `mushy-miniapp-{slug}.vercel.app` + `mushy-miniapp-{slug}-git-dev.vercel.app` được Vercel auto-cấp, không cần Cloudflare/DNS setup.
 
 ### 8.4 Submit migration mới
 
