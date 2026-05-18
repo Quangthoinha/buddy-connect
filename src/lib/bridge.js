@@ -18,7 +18,10 @@ import { isInShell } from './context.js';
 // Override qua opts.timeout nếu cần.
 const DEFAULT_TIMEOUT_MS = 10_000;
 const INTERACTIVE_TIMEOUT_MS = 5 * 60_000;
-const INTERACTIVE_TYPES = new Set(['OPEN_CAMERA', 'PICK_FILE', 'SCAN_QR', 'BIOMETRIC', 'SHARE']);
+const INTERACTIVE_TYPES = new Set([
+  'OPEN_CAMERA', 'PICK_FILE', 'SCAN_QR', 'BIOMETRIC', 'SHARE',
+  'SAVE_IMAGE', 'SAVE_CONTACT', 'PICK_CONTACT', 'ADD_CALENDAR_EVENT',
+]);
 const pending = new Map();
 let nextId = 1;
 
@@ -118,6 +121,37 @@ export const bridge = {
   },
 
   refreshToken: () => callNative('REFRESH_TOKEN'),
+
+  // Lưu ảnh vào thư viện máy. payload: { dataUrl } | { base64, mimeType } | { url }
+  saveImage: (payload) => callNative('SAVE_IMAGE', payload),
+
+  // Clipboard. copyText('...') / getClipboard() → { text }
+  async copyText(text) {
+    if (!isInShell()) {
+      try { await navigator.clipboard.writeText(String(text ?? '')); } catch { /* noop */ }
+      return { copied: true };
+    }
+    return callNative('COPY_TEXT', { text: String(text ?? '') });
+  },
+  async getClipboard() {
+    if (!isInShell()) {
+      try { return { text: await navigator.clipboard.readText() }; } catch { return { text: '' }; }
+    }
+    return callNative('GET_CLIPBOARD');
+  },
+
+  // Mở màn Cài đặt app (hướng dẫn khi user lỡ từ chối quyền).
+  openSettings: () => callNative('OPEN_SETTINGS'),
+
+  // Lưu liên hệ vào Danh bạ. payload: { name, phone, email? }
+  saveContact: (payload) => callNative('SAVE_CONTACT', payload),
+  // Chọn 1 liên hệ từ Danh bạ → { name, phone }
+  pickContact: () => callNative('PICK_CONTACT'),
+
+  // Thêm sự kiện vào Lịch (UI hệ thống). payload:
+  //   { title, startDate, endDate?, notes?, location?, allDay? }
+  //   startDate/endDate = ISO string hoặc epoch ms.
+  addCalendarEvent: (payload) => callNative('ADD_CALENDAR_EVENT', payload),
 };
 
 // ---------- Mocks (DEV only, low-level callNative path) ----------
@@ -155,6 +189,27 @@ async function mock(type, payload) {
       return { success: true };
     case 'REFRESH_TOKEN':
       throw new Error('REFRESH_TOKEN bridge chỉ chạy trong Shell. Dev local: npm run dev:token.');
+    case 'SAVE_IMAGE':
+      console.log('[mock save-image]', payload?.dataUrl ? 'dataUrl' : payload?.url || 'base64');
+      return { saved: true };
+    case 'COPY_TEXT':
+      try { await navigator.clipboard.writeText(String(payload?.text ?? '')); } catch { /* noop */ }
+      console.log('[mock copy-text]', payload?.text);
+      return { copied: true };
+    case 'GET_CLIPBOARD':
+      try { return { text: await navigator.clipboard.readText() }; } catch { return { text: '' }; }
+    case 'OPEN_SETTINGS':
+      console.log('[mock open-settings] (browser no-op)');
+      return { opened: true };
+    case 'SAVE_CONTACT':
+      console.log('[mock save-contact]', payload?.name, payload?.phone);
+      return { saved: true, id: 'mock-contact' };
+    case 'PICK_CONTACT':
+      console.log('[mock pick-contact] returning fake');
+      return { name: 'Mock Contact', phone: '0900000000' };
+    case 'ADD_CALENDAR_EVENT':
+      console.log('[mock add-calendar-event]', payload?.title);
+      return { action: 'saved', saved: true };
     default:
       throw new Error(`Bridge mock chưa hỗ trợ type: ${type}`);
   }

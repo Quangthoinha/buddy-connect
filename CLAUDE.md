@@ -294,7 +294,7 @@ alter table app_{slug}.tablename replica identity full;
 |---|---|---|
 | `context.js` | `getContext()`, `isInShell()` | Lấy `{ token, userId, workspaceId, workspaceSlug, role, userDevMode, isAppOwner }` |
 | `supabase.js` | `db`, `dbPublic`, `getSupabase()`, `getPublicSupabase()` | `db` scoped vào `app_{slug}` (theo VITE_APP_ENV → có thể là `_dev`); `dbPublic` cho public.* (hiếm dùng) |
-| `bridge.js` | `callNative('TYPE', payload)`, `bridge.*` (typed helpers) | Native bridge. Type: `GET_LOCATION` / `OPEN_CAMERA` / `PICK_FILE` / `PUSH_NOTIFICATION` / `OPEN_TEL` / `OPEN_URL` / `SHARE` / `HAPTIC` / `SCAN_QR` / `BIOMETRIC` / `REFRESH_TOKEN`. Helpers ưu tiên (`bridge.tel(...)`, `bridge.share(...)`, `bridge.haptic('success')`, `bridge.scanQr()`, `bridge.biometric(...)`) — auto-fallback browser khi DEV. Mock tự bật khi không có Shell. Generic non-http scheme (zalo://, whatsapp://, maps://...) tự được Shell route ra Linking — `<a href="...">` cũng work. |
+| `bridge.js` | `callNative('TYPE', payload)`, `bridge.*` (typed helpers) | Native bridge. Type: `GET_LOCATION` / `OPEN_CAMERA` / `PICK_FILE` / `PUSH_NOTIFICATION` / `OPEN_TEL` / `OPEN_URL` / `SHARE` / `HAPTIC` / `SCAN_QR` / `BIOMETRIC` / `REFRESH_TOKEN` / `SAVE_IMAGE` / `COPY_TEXT` / `GET_CLIPBOARD` / `OPEN_SETTINGS` / `SAVE_CONTACT` / `PICK_CONTACT` / `ADD_CALENDAR_EVENT`. Helpers ưu tiên (`bridge.tel`, `bridge.share`, `bridge.haptic`, `bridge.scanQr`, `bridge.biometric`, `bridge.saveImage`, `bridge.copyText`, `bridge.getClipboard`, `bridge.openSettings`, `bridge.saveContact`, `bridge.pickContact`, `bridge.addCalendarEvent`) — auto-fallback browser khi DEV. Mock tự bật khi không có Shell. Generic non-http scheme (zalo://, whatsapp://, maps://...) tự được Shell route ra Linking — `<a href="...">` cũng work. |
 | `storage.js` | `upload(file, folder)`, `getViewUrl(objectKey)` | Bucket `miniapp-{slug}` **auto-tạo bởi Admin Portal khi register app** (giống DNS). Mini-app dev KHÔNG viết storage SQL. Path: `{ws_id}/[dev/]{folder}/{uuid}.{ext}` (dev có prefix `dev/` để dễ wipe). Lưu `object_key` vào DB. R2 opt-in qua `VITE_USE_R2=true`. |
 | `realtime.js` | `subscribeToTable(table, workspaceId, cb)`, `subscribeBroadcast()` | Trả unsubscribe — gọi khi unmount! |
 | `queue.js` | `enqueue(jobType, payload)`, `onJob(jobId, cb)` | Tác vụ nặng async qua `public.job_queue` |
@@ -618,6 +618,11 @@ Khi user nói:
 - **"Haptic / Rung phản hồi"** → `bridge.haptic('success'|'warning'|'error'|'light'|'medium'|'heavy'|'selection')`. Free UX win cho confirm/swipe action.
 - **"Quét QR"** → `bridge.scanQr()` → `{ data, type }`. Mở camera full-screen overlay trong Shell.
 - **"Xác thực sinh trắc / Face ID"** → `bridge.biometric({ promptMessage: 'Xác nhận' })` → `{ success }`. Gate action nhạy cảm. Browser luôn throw — mini-app phải có password fallback.
+- **"Lưu ảnh vào máy"** (QR chuyển tiền, ảnh tạo từ canvas…) → `bridge.saveImage({ dataUrl })` (hoặc `{ base64, mimeType }` / `{ url }`). DataUrl = `canvas.toDataURL()`. → `{ saved: true }`.
+- **"Sao chép / dán"** → `bridge.copyText('STK 123...')` → `{ copied }`. `bridge.getClipboard()` → `{ text }`. Dùng khi `navigator.clipboard` bị WebView chặn.
+- **"Mở Cài đặt app"** (user lỡ từ chối quyền) → `bridge.openSettings()`.
+- **"Lưu danh bạ / chọn danh bạ"** → `bridge.saveContact({ name, phone, email? })` → `{ saved, id }`. `bridge.pickContact()` → `{ name, phone }` (system picker, không cần quyền đọc full danh bạ).
+- **"Thêm vào Lịch"** (deadline, sinh nhật, sự kiện đội) → `bridge.addCalendarEvent({ title, startDate, endDate?, notes?, location?, allDay? })`. `startDate/endDate` = ISO string / epoch ms. Mở UI hệ thống, user xác nhận → `{ action, saved }`.
 - **"Hiện avatar / tên member"** (voter, comment author, mention, presence…) → `listMembers(ctx.workspaceId)` từ `src/lib/members.js` → `[{ user_id, role, display_name, avatar_url }, ...]`. Hoặc `getProfiles([uid1, uid2])` cho subset đã biết user_ids. KHÔNG dùng hash-color + chữ cái UUID — RLS workspace-mate đã cho phép real lookup (superapp migration 004).
 
 Memory bên Mushy chính (đọc nếu cần):
