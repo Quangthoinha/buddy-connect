@@ -623,7 +623,7 @@ Khi user nói:
 - **"Mở Cài đặt app"** (user lỡ từ chối quyền) → `bridge.openSettings()`.
 - **"Lưu danh bạ / chọn danh bạ"** → `bridge.saveContact({ name, phone, email? })` → `{ saved, id }`. `bridge.pickContact()` → `{ name, phone }` (system picker, không cần quyền đọc full danh bạ).
 - **"Thêm vào Lịch"** (deadline, sinh nhật, sự kiện đội) → `bridge.addCalendarEvent({ title, startDate, endDate?, notes?, location?, allDay? })`. `startDate/endDate` = ISO string / epoch ms. Mở UI hệ thống, user xác nhận → `{ action, saved }`.
-- **"Hiện avatar / tên member"** (voter, comment author, mention, presence…) → `listMembers(ctx.workspaceId)` từ `src/lib/members.js` → `[{ user_id, role, full_name, avatar_url }, ...]`. Hoặc `getProfiles([uid1, uid2])` cho subset đã biết user_ids. KHÔNG dùng hash-color + chữ cái UUID — RLS workspace-mate đã cho phép real lookup (superapp migration 004).
+- **"Hiện avatar / tên member"** (voter, comment author, mention, presence…) → `listMembers(ctx.workspaceId)` từ `src/lib/members.js` → `[{ user_id, role, full_name, avatar_url, work_phone }, ...]`. Hoặc `getProfiles([uid1, uid2])` cho subset đã biết user_ids. KHÔNG dùng hash-color + chữ cái UUID — RLS workspace-mate đã cho phép real lookup (superapp migration 004). `work_phone` có thể null (user chưa khai) — dùng cho tap-to-call qua `bridge.tel(member.work_phone)`.
 
 Memory bên Mushy chính (đọc nếu cần):
 - `project_environments.md` — kiến trúc dev/prod, schema-per-env, dev_mode
