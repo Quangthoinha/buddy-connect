@@ -57,6 +57,9 @@ for d in "${FULL_DIRS[@]}"; do
     while IFS= read -r f; do
       rel="${f#$d/}"
       [ "$d" = "scripts" ] && [ "$rel" = "sync-template.sh" ] && continue
+      # Convention (CLAUDE.md 11.3.1): src/lib/app/* là app-specific subfolder,
+      # KHÔNG flag + KHÔNG bị --delete touch.
+      [ "$d" = "src/lib" ] && [[ "$rel" == app/* ]] && continue
       if [ ! -e "$TEMPLATE_DIR/$d/$rel" ]; then
         EXTRA_FILES+=("$f")
       fi
@@ -89,6 +92,10 @@ for d in "${FULL_DIRS[@]}"; do
     # KHÔNG sync sync-template.sh chính nó (vòng lặp tự sync mình)
     if [ "$d" = "scripts" ]; then
       rsync -av --exclude='sync-template.sh' "$TEMPLATE_DIR/$d/" "$d/"
+    elif [ "$d" = "src/lib" ]; then
+      # Convention (CLAUDE.md 11.3.1): src/lib/app/ là subfolder app-specific,
+      # KHÔNG bị --delete. Mọi file shared khác vẫn --delete bình thường.
+      rsync -av --delete --exclude='app/' "$TEMPLATE_DIR/$d/" "$d/"
     else
       rsync -av --delete "$TEMPLATE_DIR/$d/" "$d/"
     fi
