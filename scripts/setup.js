@@ -69,34 +69,50 @@ const rl = readline.createInterface({ input, output });
 async function main() {
   console.log('— Mini-app dev setup —\n');
 
-  // 1. Login qua OTP (magic link). Mushy đã bỏ password — flow chuẩn:
-  //    a. signInWithOtp({ email, shouldCreateUser: false }) → server gửi mail OTP
-  //       (shouldCreateUser=false vì user phải đăng ký trên app Mushy trước —
-  //        signup từ CLI script sẽ tạo orphan account, không có hồ sơ trong app)
-  //    b. User mở mail, lấy mã 6 chữ số, paste vào terminal
-  //    c. verifyOtp({ email, token, type: 'email' }) → có session.access_token
+  // 1. Login qua OTP — gọi Edge Function `auth-login-otp` để hỗ trợ dual
+  // email (login email / work_email / personal_email — superapp mig 033).
+  //    a. POST { action: 'request', email } → Edge Function lookup
+  //       find_user_by_verified_email + gửi OTP qua Resend tới email user nhập.
+  //    b. User mở mail, lấy mã 6 chữ số, paste vào terminal.
+  //    c. POST { action: 'verify', email, code } → trả access_token + refresh_token.
+  //    d. setSession để PostgREST nhận JWT.
+  //
+  // KHÔNG dùng supabase.auth.signInWithOtp/verifyOtp trực tiếp — đó chỉ check
+  // auth.users.email (= login email gốc), không match work_email / personal_email
+  // verified. Edge Function lo dual-email lookup cho parity với app Mushy.
   console.log('Bước 1/3: Đăng nhập qua email OTP');
-  console.log('  (Mushy đã bỏ password — chỉ cần email, sẽ nhận mã OTP qua mail)\n');
+  console.log('  (Chấp nhận email cá nhân, email công ty đã verify, hoặc email login Mushy)\n');
   const email = (await rl.question('Email Mushy: ')).trim().toLowerCase();
   if (!email || !email.includes('@')) {
     console.error('❌ Email không hợp lệ.');
     process.exit(1);
   }
 
+  const otpEndpoint = `${SUPABASE_URL}/functions/v1/auth-login-otp`;
   console.log('Đang gửi mã OTP tới', email, '...');
-  const { error: otpErr } = await sb.auth.signInWithOtp({
-    email,
-    options: { shouldCreateUser: false },
+  const requestRes = await fetch(otpEndpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ANON_KEY}`,
+      apikey: ANON_KEY,
+    },
+    body: JSON.stringify({ action: 'request', email }),
   });
-  if (otpErr) {
-    console.error('❌ Gửi OTP thất bại:', otpErr.message);
-    if (/not found|signups not allowed/i.test(otpErr.message)) {
-      console.error('   → Email chưa đăng ký trên Mushy. Mở app Mushy → Đăng ký với email này trước.');
+  const requestBody = await requestRes.json().catch(() => ({}));
+  if (!requestRes.ok || !requestBody?.sent) {
+    const errCode = requestBody?.error || `HTTP_${requestRes.status}`;
+    console.error('❌ Gửi OTP thất bại:', errCode);
+    if (requestBody?.detail) console.error('   →', requestBody.detail);
+    if (errCode === 'RATE_LIMIT') {
+      console.error('   → Đã gửi quá nhiều mã gần đây. Thử lại sau 10 phút.');
+    } else if (requestBody?.isNew === false || /not.*regist|chưa đăng/i.test(requestBody?.detail || '')) {
+      console.error('   → Email chưa đăng ký Mushy. Mở app Mushy → Đăng ký với email này trước.');
     }
     process.exit(1);
   }
   console.log('✓ Đã gửi. Kiểm tra mail (kể cả Spam) — mã 6 chữ số.');
-  console.log('  (Token hết hạn sau 1 giờ. Nếu cần gửi lại, chạy lại lệnh này.)\n');
+  console.log('  (Token hết hạn sau 10 phút. Nếu cần gửi lại, chạy lại lệnh này.)\n');
 
   const token = (await rl.question('Mã OTP 6 chữ số: ')).trim();
   if (!/^\d{6}$/.test(token)) {
@@ -104,16 +120,33 @@ async function main() {
     process.exit(1);
   }
 
-  const { data: auth, error: verifyErr } = await sb.auth.verifyOtp({
-    email,
-    token,
-    type: 'email',
+  const verifyRes = await fetch(otpEndpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ANON_KEY}`,
+      apikey: ANON_KEY,
+    },
+    body: JSON.stringify({ action: 'verify', email, code: token }),
   });
-  if (verifyErr) {
-    console.error('❌ Xác minh OTP thất bại:', verifyErr.message);
-    console.error('   → Mã sai hoặc đã hết hạn. Chạy lại lệnh để nhận mã mới.');
+  const verifyBody = await verifyRes.json().catch(() => ({}));
+  if (!verifyRes.ok || !verifyBody?.access_token) {
+    const errCode = verifyBody?.error || `HTTP_${verifyRes.status}`;
+    console.error('❌ Xác minh OTP thất bại:', errCode);
+    if (verifyBody?.detail) console.error('   →', verifyBody.detail);
+    if (errCode === 'OTP_INVALID' || errCode === 'OTP_EXPIRED') {
+      console.error('   → Mã sai hoặc đã hết hạn. Chạy lại lệnh để nhận mã mới.');
+    }
     process.exit(1);
   }
+
+  // setSession với tokens từ Edge Function — PostgREST giờ nhận JWT trong query.
+  const { data: setData, error: setErr } = await sb.auth.setSession({
+    access_token: verifyBody.access_token,
+    refresh_token: verifyBody.refresh_token,
+  });
+  if (setErr) { console.error('❌ setSession:', setErr.message); process.exit(1); }
+  const auth = { user: setData.user, session: setData.session };
   console.log('✓ Logged in as', auth.user.email);
 
   // Re-create client với token explicit để đảm bảo PostgREST nhận JWT
