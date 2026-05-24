@@ -336,11 +336,9 @@ export function useVisibleScopes() {
       .then(([scopes, hiddenArr]) => {
         if (cancelled) return;
         const hiddenIds = new Set(hiddenArr);
-        // Filter: ẩn các scope follower có owner trong hidden list. KHÔNG
-        // ẩn owner_member (chính ws của user) — luôn truy cập được.
-        const visible = scopes.filter(
-          (s) => s.scopeKind === 'owner_member' || !hiddenIds.has(s.workspaceId),
-        );
+        // Filter mọi scope có workspace_id trong hidden list (kể cả own ws).
+        // Default scope luôn unhidden bởi RPC gate ở mig 053.
+        const visible = scopes.filter((s) => !hiddenIds.has(s.workspaceId));
         setData({ scopes: visible, hiddenIds });
         setError(null);
       })
