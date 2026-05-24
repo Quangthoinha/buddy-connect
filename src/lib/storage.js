@@ -17,7 +17,7 @@
 // (foldername[1] = workspace_id vẫn match RLS policy. dev có prefix /dev/ để
 // dễ wipe sạch test data: delete from storage.objects where name like '%/dev/%')
 
-import { getContext } from './context.js';
+import { getActiveScope } from './sharing.js';
 import { getSupabase } from './supabase.js';
 import config from '../../mushy.config.json';
 
@@ -35,10 +35,16 @@ const ENV_PREFIX = vercelEnv === 'production' ? '' : 'dev/';
 const urlCache = new Map(); // objectKey → { url, expiresAt }
 
 export async function upload(file, folder = 'uploads') {
-  const ctx = getContext();
+  // Path workspace_id = active scope (owner ws khi user xem data shared).
+  // ⚠️ TODO: bucket RLS hiện scope `{ws_id}/...` theo workspace_members trực
+  // tiếp (Admin Portal auto-tạo). Follower share KHÔNG upload được vào owner
+  // ws path tới khi storage RLS được mở rộng dùng `can_access_app_data`. App
+  // pilot cross-ws sharing nên tránh upload từ follower scope, hoặc nhờ
+  // anhdqvn update storage policy template.
+  const wsId = getActiveScope().workspaceId;
   const ext = (file.name || 'bin').split('.').pop();
   // Path: {workspace_id}/[dev/]{folder}/{uuid}.{ext}
-  const objectKey = `${ctx.workspaceId}/${ENV_PREFIX}${folder}/${cryptoUuid()}.${ext}`;
+  const objectKey = `${wsId}/${ENV_PREFIX}${folder}/${cryptoUuid()}.${ext}`;
 
   if (!useR2) {
     const { error } = await getSupabase().storage.from(BUCKET).upload(objectKey, file);

@@ -30,13 +30,19 @@
 
 import config from '../../mushy.config.json';
 import { getContext } from './context.js';
+import { getActiveScope } from './sharing.js';
 
 const BASE = `${config.supabase.url}/functions/v1/mini-proxy`;
 
 async function call(action, payload) {
   const ctx = getContext();
+  // workspaceId trong body = active scope (ws user đang thao tác). Khi user
+  // đang xem data ws shared, active scope = owner ws → mini-proxy mở rộng
+  // recipients sang followers; membership check chấp nhận caller là member
+  // của 1 ws follower có grant tới active scope (superapp mig 049).
+  const activeWsId = getActiveScope().workspaceId;
   if (!ctx.token) throw new Error('mushy-api: missing token in context');
-  if (!ctx.workspaceId) throw new Error('mushy-api: missing workspaceId in context');
+  if (!activeWsId) throw new Error('mushy-api: missing active scope workspaceId');
 
   const res = await fetch(BASE, {
     method: 'POST',
@@ -51,7 +57,7 @@ async function call(action, payload) {
       // User identity thật — function đọc + verify qua admin.auth.getUser.
       'X-Mushy-User-Token': ctx.token,
     },
-    body: JSON.stringify({ action, workspaceId: ctx.workspaceId, ...payload }),
+    body: JSON.stringify({ action, workspaceId: activeWsId, ...payload }),
   });
 
   const json = await res.json().catch(() => ({ error: `non-JSON ${res.status}` }));
@@ -82,7 +88,12 @@ export const mushyApi = {
     return call('push', {
       title,
       body,
-      data: { workspaceId: getContext().workspaceId, ...data },
+      // Deep link: data.workspaceId = active scope (owner ws khi user đang xem
+      // data shared). Recipient là member của owner ws → tap noti → shell mở
+      // mini-app trong scope đó OK. Recipient là member của follower ws → shell
+      // không switch sang owner ws (user không phải member) → fall back sang
+      // home ws + open app slug (active scope tự sync lại qua localStorage).
+      data: { workspaceId: getActiveScope().workspaceId, ...data },
       userIds,
     });
   },

@@ -180,6 +180,8 @@ Khi mini-app owner bật `dev_mode` ở Settings + đang test mini-app (qua prev
 - **KHÔNG viết SQL nào touch schema `storage`** (bucket, objects, policies). Reviewer chặn hết. Bucket + RLS auto-tạo bởi Admin Portal khi register app — giống Cloudflare DNS auto-create.
 
 ### 3.2 Mọi table phải có
+
+**RLS pattern hỗ trợ cross-workspace sharing** (superapp mig 049 — xem section 3.6):
 ```sql
 create table if not exists app_{slug}.tablename (
   id            uuid primary key default gen_random_uuid(),
@@ -194,14 +196,39 @@ grant select, insert, update, delete on app_{slug}.tablename to authenticated;
 
 alter table app_{slug}.tablename enable row level security;
 
-create policy "workspace_isolation" on app_{slug}.tablename
-for all using (
-  workspace_id in (select workspace_id from public.workspace_members where user_id = auth.uid())
-)
-with check (
-  workspace_id in (select workspace_id from public.workspace_members where user_id = auth.uid())
+-- 4 policies tách biệt — KHÔNG dùng `for all` (vì DELETE cần restrict hơn).
+-- `{slug}` LITERAL trong policy — KHÔNG dùng biến (helper cần biết app slug).
+drop policy if exists "tablename_select" on app_{slug}.tablename;
+create policy "tablename_select" on app_{slug}.tablename
+for select using (
+  public.can_access_app_data(workspace_id, '{slug}')
+);
+
+drop policy if exists "tablename_insert" on app_{slug}.tablename;
+create policy "tablename_insert" on app_{slug}.tablename
+for insert with check (
+  public.can_access_app_data(workspace_id, '{slug}')
+);
+
+drop policy if exists "tablename_update" on app_{slug}.tablename;
+create policy "tablename_update" on app_{slug}.tablename
+for update using (
+  public.can_access_app_data(workspace_id, '{slug}')
+) with check (
+  public.can_access_app_data(workspace_id, '{slug}')
+);
+
+-- DELETE: chỉ member TRỰC TIẾP của ws owner. Follower share KHÔNG delete được.
+drop policy if exists "tablename_delete" on app_{slug}.tablename;
+create policy "tablename_delete" on app_{slug}.tablename
+for delete using (
+  public.is_owner_workspace_member(workspace_id)
 );
 ```
+
+Helpers fallback đúng khi app KHÔNG có share grant nào: chỉ member của workspace_id thấy/sửa được — giống pattern cũ `workspace_isolation`. Mặc định KHÔNG ai bị share gì cho tới khi owner gen mã + follower redeem (xem 3.6).
+
+⚠️ **Hardcode app slug trong policy** (`'{slug}'` literal). Helper `can_access_app_data` cần biết app để filter grants đúng — không có cách inject biến runtime ở DB level. Nếu slug đổi (không nên — xem section 1) → phải update mọi policy.
 
 ### 3.3 Kiểu dữ liệu
 - **Tiền**: `bigint` (đơn vị nhỏ nhất, vd VND × 1)
@@ -212,23 +239,87 @@ with check (
 
 ### 3.4 Workspace scoping (đặc biệt quan trọng)
 
-⚠️ **Mọi query PHẢI có `.eq('workspace_id', ctx.workspaceId)`**. RLS chỉ chặn cross-user, KHÔNG chặn cross-workspace của cùng user. User là member của nhiều workspace → RLS cho thấy hết → query phải scope tay.
+⚠️ **Mọi query PHẢI có `.eq('workspace_id', activeScope.workspaceId)`**. RLS chỉ chặn cross-user, KHÔNG chặn cross-workspace của cùng user (qua direct membership lẫn share grant). User là member của nhiều workspace → RLS cho thấy hết → query phải scope tay.
 
 ```js
-// ✅ Đúng
-const { data } = await db.from('notes').select('*')
-  .eq('workspace_id', ctx.workspaceId);
+import { useActiveScope } from './lib/sharing.js';
 
-// ❌ Sai — sẽ thấy notes ở workspace khác user cũng là member
-const { data } = await db.from('notes').select('*');
+function MyComponent() {
+  const scope = useActiveScope();   // { workspaceId, scopeKind, label }
 
-// ✅ Insert: gán workspace_id từ context
-await db.from('notes').insert({ ...payload, workspace_id: ctx.workspaceId });
+  // ✅ Đúng — dùng active scope (default = ctx.workspaceId; nếu user switch
+  //    qua scope follower thì là workspace_id của ws owner đang được share)
+  const { data } = await db.from('notes').select('*')
+    .eq('workspace_id', scope.workspaceId);
+
+  // ❌ Sai — sẽ thấy notes ở workspace khác user cũng là member/follower
+  const { data } = await db.from('notes').select('*');
+
+  // ✅ Insert: gán workspace_id từ active scope
+  await db.from('notes').insert({ ...payload, workspace_id: scope.workspaceId });
+}
 ```
 
 Áp dụng cho `select`, `update`, `delete`. `insert` thì set `workspace_id` trong row.
 
+**Nếu mini-app KHÔNG opt-in sharing**: `scope.workspaceId` luôn = `ctx.workspaceId`. Vẫn nên dùng `useActiveScope()` thay vì `ctx.workspaceId` trực tiếp — để khi opt-in sharing sau này không phải refactor.
+
 Xem `migrations/001_init_example.sql` làm template chi tiết.
+
+### 3.5 Cross-workspace sharing — pattern share data sang ws khác
+
+**Vấn đề**: 2 team Mushy muốn cộng tác trên data của 1 mini-app (vd: cùng 1 KB chiến lược, cùng 1 sổ chi tiêu...). Mặc định mỗi ws data riêng — không thấy nhau.
+
+**Giải pháp** (superapp mig 049): owner workspace A gen mã 6 ký tự → ws B/C/D redeem → row được tạo trong `public.app_share_grants`. Sau đó:
+- Member của B/C/D đọc + insert + update **trực tiếp** vào data của A (row có `workspace_id = A.id`). KHÔNG copy, KHÔNG mirror — 1 dataset thật.
+- Chỉ owner/admin của A gen mã được. Chỉ owner/admin của B redeem được.
+- Re-share KHÔNG cho phép (B không grant tiếp cho D). Chỉ A grant.
+- Follower KHÔNG delete row của A (RLS `for delete` chỉ cho member trực tiếp).
+- Unpair = xoá grant → follower mất access tức thì. Data ở yên A.
+- Push noti từ scope shared → tự gửi cho members(A) ∪ members(B, C, D) (mini-proxy mở rộng tự động).
+
+**UI** (header):
+```jsx
+import ScopeSwitcher from './components/ScopeSwitcher.jsx';
+
+<header>
+  <ScopeSwitcher onManageGrants={() => setShowGrantsModal(true)} />
+</header>
+```
+Dropdown liệt kê:
+- Mọi ws user là member → "🏠 [WS name] · Workspace của bạn"
+- Mọi ws có grant tới 1 ws của user → "⇆ [Owner WS name] · Chia sẻ qua [Follower WS name]"
+
+User chọn → mọi query dùng `useActiveScope().workspaceId` tự động (xem 3.4).
+
+**Lib API** (`src/lib/sharing.js`):
+```js
+import {
+  generateShareCode, redeemShareCode, listShareGrants, revokeShareGrant,
+  listAccessibleScopes, useActiveScope, useAccessibleScopes
+} from './lib/sharing.js';
+
+// Owner side — settings modal "Share data" button
+const { code, expiresAt } = await generateShareCode({ expiresHours: 24 });
+// Hiện code cho user copy/share qua chat
+
+// Follower side — settings modal "Redeem code" input
+const grant = await redeemShareCode({ code: 'ABCD23' });
+
+// List grants liên quan (cả 2 phía) — settings modal
+const grants = await listShareGrants();
+// [{ grantId, direction: 'as_owner'|'as_follower', ownerWorkspaceName, followerWorkspaceName, ... }]
+
+// Revoke 1 grant
+await revokeShareGrant(grantId);
+```
+
+**KHÔNG cần migration mini-app riêng cho feature này** — superapp mig 049 đã expose RPC + helpers ở `public.*`. Mini-app chỉ cần:
+1. RLS policy dùng `public.can_access_app_data(workspace_id, '{slug}')` (xem 3.2)
+2. Render `<ScopeSwitcher />` ở header
+3. Dùng `useActiveScope().workspaceId` thay `ctx.workspaceId` trong mọi query (xem 3.4)
+
+### 3.6 Realtime — opt-in cho table cần stream changes
 
 ### 3.5 Realtime — opt-in cho table cần stream changes
 
@@ -298,13 +389,15 @@ alter table app_{slug}.tablename replica identity full;
 | `storage.js` | `upload(file, folder)`, `getViewUrl(objectKey)` | Bucket `miniapp-{slug}` **auto-tạo bởi Admin Portal khi register app** (giống DNS). Mini-app dev KHÔNG viết storage SQL. Path: `{ws_id}/[dev/]{folder}/{uuid}.{ext}` (dev có prefix `dev/` để dễ wipe). Lưu `object_key` vào DB. R2 opt-in qua `VITE_USE_R2=true`. |
 | `realtime.js` | `subscribeToTable(table, workspaceId, cb)`, `subscribeBroadcast()` | Trả unsubscribe — gọi khi unmount! |
 | `queue.js` | `enqueue(jobType, payload)`, `onJob(jobId, cb)` | Tác vụ nặng async qua `public.job_queue` |
-| `mushy-api.js` | `mushyApi.push({...})` | Gateway sang superapp `mini-proxy` cho privileged op (push noti remote). User JWT auth — không cần service_role. |
+| `mushy-api.js` | `mushyApi.push({...})` | Gateway sang superapp `mini-proxy` cho privileged op (push noti remote). User JWT auth — không cần service_role. Push tự mở rộng recipients sang follower ws nếu có grant (superapp mig 049). |
 | `members.js` | `listMembers(workspaceId)`, `getProfiles(userIds)` | Batch lookup workspace members + full_name/avatar_url qua `dbPublic`. RLS workspace-mate đã mở (superapp mig 004). KHÔNG dùng hash-color fallback nữa. |
+| `sharing.js` | `generateShareCode()`, `redeemShareCode()`, `listShareGrants()`, `revokeShareGrant()`, `listAccessibleScopes()`, `useActiveScope()`, `useAccessibleScopes()`, `getActiveScope()`, `setActiveScope()`, `resetActiveScope()` | Cross-workspace data sharing (superapp mig 049). `useActiveScope()` trả ws đang thao tác (default ctx.workspaceId; đổi qua `<ScopeSwitcher />`). Dùng `scope.workspaceId` cho mọi query thay `ctx.workspaceId`. Xem section 3.5. |
 | `theme.js` | `colors`, `radii`, `fonts`, `space`, `fontSize` | Inline style nếu cần |
 
 **Component sẵn có** (`src/components/`):
 - `Dialog.jsx` — `DialogProvider` + `useDialog()`. Wrap App với `<DialogProvider>` (đã có trong `main.jsx`).
 - `Select.jsx` — custom dropdown thay native `<select>` (KHÔNG được dùng `<select>` HTML — break design system). API: `<Select value onChange options={[{value, label, icon?}]} placeholder />`. Click ngoài + Esc đóng, keyboard nav (Up/Down/Enter).
+- `ScopeSwitcher.jsx` — header dropdown chọn ws đang thao tác (cross-ws sharing). API: `<ScopeSwitcher onManageGrants={() => ...} />`. Auto-collapse thành label chỉ-đọc nếu chỉ có 1 scope (user chưa share gì). Xem section 3.5.
 
 ### Dialog API (THAY native alert/confirm)
 
@@ -369,7 +462,9 @@ miniapp-{slug}/
 │   ├── App.jsx               ← UI mini-app (sửa khi build)
 │   ├── App.css               ← style app-specific
 │   ├── components/
-│   │   └── Dialog.jsx        ← DialogProvider + useDialog
+│   │   ├── Dialog.jsx        ← DialogProvider + useDialog
+│   │   ├── Select.jsx        ← custom dropdown thay native <select>
+│   │   └── ScopeSwitcher.jsx ← header dropdown chọn workspace đang thao tác
 │   └── lib/                  ← shared infra (đừng sửa, sync với template)
 │       ├── theme.css
 │       ├── theme.js
@@ -380,7 +475,8 @@ miniapp-{slug}/
 │       ├── realtime.js
 │       ├── queue.js
 │       ├── mushy-api.js      ← gateway sang superapp mini-proxy (push, …)
-│       └── members.js        ← batch lookup workspace members + profiles
+│       ├── members.js        ← batch lookup workspace members + profiles
+│       └── sharing.js        ← cross-workspace data sharing + active scope
 ├── api/                      ← Vercel Serverless Functions
 │   ├── _verify.js            ← verify JWT, KHÔNG expose endpoint
 │   └── ai-proxy.js           ← ví dụ: proxy AI request server-side
@@ -579,7 +675,9 @@ Cả 2 URL `mushy-miniapp-{slug}.vercel.app` + `mushy-miniapp-{slug}-git-dev.ver
 - ❌ Quên RLS hoặc "tạm thời" disable
 - ❌ Quên `.eq('workspace_id', ctx.workspaceId)` trong query
 - ❌ Lưu URL file vào DB (lưu `object_key`)
-- ❌ Hardcode workspaceId — luôn `getContext().workspaceId`
+- ❌ Hardcode workspaceId — dùng `useActiveScope().workspaceId` (xem 3.4). Fallback `getContext().workspaceId` chỉ chấp nhận khi mini-app chắc chắn không bao giờ opt-in sharing.
+- ❌ Tự viết policy `for delete using (public.can_access_app_data(...))` — sẽ cho follower xoá data của owner. DELETE phải dùng `public.is_owner_workspace_member(workspace_id)`. Xem section 3.2.
+- ❌ Dùng `for all` policy thay 4 policy tách biệt — không enforce được DELETE riêng cho member trực tiếp. Pattern cũ `workspace_isolation` (1 policy) chỉ chấp nhận nếu chắc chắn không support sharing.
 
 ### Frontend
 - ❌ `window.alert()` / `window.confirm()` / `window.prompt()` — dùng `useDialog()`
@@ -608,7 +706,8 @@ Cả 2 URL `mushy-miniapp-{slug}.vercel.app` + `mushy-miniapp-{slug}-git-dev.ver
 
 Khi user nói:
 - **"Thêm feature X cho mini-app"** → viết UI trong `App.jsx` (hoặc tách `screens/`), dùng `db.from('table').select().eq('workspace_id', ctx.workspaceId)`, `useDialog()` cho confirm.
-- **"Cần table mới"** → viết migration `00X.sql` trong `migrations/` (chỉ `app_{slug}`), có RLS workspace_isolation, instruct user submit qua Admin Portal Reviewer. Nếu UI sẽ subscribe table này qua `subscribeToTable()` (vote count live, chat, presence, …) → **thêm `-- @realtime` trên dòng riêng ngay trước `create table`**. KHÔNG viết tay `alter publication` / `replica identity full` — Reviewer auto-append idempotent. Xem section 3.5.
+- **"Cần table mới"** → viết migration `00X.sql` trong `migrations/` (chỉ `app_{slug}`), 4 RLS policies dùng helpers `public.can_access_app_data` + `public.is_owner_workspace_member` (xem section 3.2 + 3.5), instruct user submit qua Admin Portal Reviewer. Nếu UI sẽ subscribe table này qua `subscribeToTable()` (vote count live, chat, presence, …) → **thêm `-- @realtime` trên dòng riêng ngay trước `create table`**. KHÔNG viết tay `alter publication` / `replica identity full` — Reviewer auto-append idempotent. Xem section 3.6.
+- **"Share data sang ws khác / nhận share từ ws khác"** → owner gen mã: `generateShareCode({ expiresHours })` → hiện code cho user share. Follower redeem: `redeemShareCode({ code })` từ `src/lib/sharing.js`. Header render `<ScopeSwitcher />` để switch giữa scopes. Mọi query dùng `useActiveScope().workspaceId` thay `ctx.workspaceId`. KHÔNG cần migration mini-app riêng — RLS dùng helper `public.can_access_app_data(workspace_id, '{slug}')` (section 3.2) là đủ. Quản lý + revoke grant: `listShareGrants()` / `revokeShareGrant(grantId)`. Xem section 3.5.
 - **"Gọi AI"** → tạo `api/X-proxy.js` dùng `_verify.js`, set key Vercel env. Anti-injection: wrap input, force JSON, validate output.
 - **"Upload file"** → dùng `upload(file, folder)` từ `storage.js`, lưu `object_key` vào DB, `getViewUrl()` khi render.
 - **"Push notification"** → local (chỉ device user): `callNative('PUSH_NOTIFICATION', { title, body })` từ `bridge.js`. Remote (gửi cho members workspace): `mushyApi.push({ title, body, data?, userIds? })` từ `mushy-api.js` → superapp `mini-proxy` → Expo Push API. `data` cần `appSlug` để Shell deeplink vào mini-app khi tap noti (thêm `screen`, `recordId` nếu cần — Shell pass qua query params). `workspaceId` auto-inject từ ctx — không cần truyền tay. Xem jsdoc `src/lib/mushy-api.js`.
@@ -652,6 +751,7 @@ Mini-app downstream được **fork tại 1 thời điểm** từ template này 
 | `src/lib/*` | Bridge, supabase, storage, realtime, queue, mushy-api, members, theme — toàn bộ |
 | `src/components/Dialog.jsx` | Design system primitive |
 | `src/components/Select.jsx` | Design system primitive (replace native `<select>`) |
+| `src/components/ScopeSwitcher.jsx` | Cross-workspace sharing UI primitive |
 | `api/_verify.js` | JWT verification logic |
 | `scripts/setup.js` `seed.js` `refresh-token.js` | DEV onboarding flow |
 | `.env.example` | Có thể có biến mới |

@@ -1,5 +1,5 @@
 -- =====================================================================
--- Migration mẫu cho mini-app.
+-- Migration mẫu cho mini-app — RLS pattern hỗ trợ cross-workspace sharing.
 -- Đổi `demo` thành schema thật TRƯỚC KHI SUBMIT qua Migration Reviewer.
 --
 -- ⚠️ Schema name = "app_{slug}" với dash → underscore.
@@ -21,10 +21,6 @@
 -- ║ Nếu bạn viết tay `app_lunch_plan_dev`, regex-replace lần 2 sẽ      ║
 -- ║ ra `app_lunch_plan_dev_dev` → schema sai → migration fail.         ║
 -- ║                                                                   ║
--- ║ Reviewer DETECT trước khi apply: thấy chuỗi `_dev` sau tên schema  ║
--- ║ → REJECT. Lỗi user gặp: "SQL có ref 'app_{slug}_dev' — KHÔNG viết  ║
--- ║ tay _dev, Reviewer tự duplicate sau khi apply prod."               ║
--- ║                                                                   ║
 -- ║ ❌ create table app_lunch_plan_dev.tasks (...);                    ║
 -- ║ ✅ create table app_lunch_plan.tasks (...);                        ║
 -- ╚═══════════════════════════════════════════════════════════════════╝
@@ -33,19 +29,40 @@
 --   [x] Mọi table có `workspace_id uuid not null`
 --   [x] Foreign key `workspace_id` → `public.workspaces` ON DELETE CASCADE
 --   [x] Index trên `workspace_id`
---   [x] RLS bật + policy `workspace_isolation`
+--   [x] RLS bật + 4 policies (select/insert/update/delete) dùng helpers
+--       `public.can_access_app_data` + `public.is_owner_workspace_member`
 --   [x] `created_at timestamptz default now()`
 --   [x] `created_by uuid references auth.users(id)`
 --   [x] Tiền: `bigint` (đơn vị nhỏ nhất); ID: `uuid`; thời gian: `timestamptz`
 --   [x] File: lưu `object_key`, không lưu URL
 --   [x] Trigger updated_at nếu có cột này
+--
+-- ╔═══════════════════════════════════════════════════════════════════╗
+-- ║ Về RLS pattern mới (cross-workspace sharing — superapp mig 049)   ║
+-- ╚═══════════════════════════════════════════════════════════════════╝
+-- Pattern CŨ (workspace_isolation single policy) còn dùng được nhưng KHÔNG
+-- tận dụng được feature share data cross-workspace. Pattern MỚI:
+--
+--   - `for select/insert/update`: gọi `public.can_access_app_data(workspace_id, '{slug}')`
+--     → TRUE nếu user là member của workspace_id HOẶC member của 1 ws follower
+--       có grant tới workspace_id cho app slug này.
+--   - `for delete`: gọi `public.is_owner_workspace_member(workspace_id)`
+--     → CHỈ member trực tiếp của ws owner xoá được. Follower KHÔNG delete.
+--
+-- App slug TRUYỀN LITERAL trong policy (vd 'demo'), KHÔNG dùng biến.
+-- Lý do: helper `can_access_app_data` cần biết app_slug để lookup grants
+-- đúng app — nhưng app slug không có sẵn ở DB context, phải hardcode.
+--
+-- Nếu mini-app KHÔNG cần share cross-ws: helpers vẫn fallback đúng (chỉ
+-- member của workspace_id thấy/sửa được — y hệt pattern cũ). Mặc định
+-- KHÔNG có ai bị share gì cho tới khi owner gen mã + follower redeem.
 -- =====================================================================
 
 -- ---------- Bảng tasks (ví dụ) ----------
 -- Để mini-app subscribe realtime cho table này: uncomment "-- @realtime" dòng
 -- dưới. Reviewer tự append ALTER PUBLICATION + REPLICA IDENTITY FULL idempotent
 -- vào cuối SQL khi apply (cả prod + dev schema). KHÔNG cần tự viết 2 DDL đó.
--- Xem CLAUDE.md section 3.5.
+-- Xem CLAUDE.md section 3.6.
 --
 -- -- @realtime
 create table if not exists app_demo.tasks (
@@ -68,17 +85,37 @@ grant select, insert, update, delete on app_demo.tasks to authenticated;
 
 alter table app_demo.tasks enable row level security;
 
+-- Drop legacy policy (nếu migration cũ từng tạo "workspace_isolation")
 drop policy if exists "workspace_isolation" on app_demo.tasks;
-create policy "workspace_isolation" on app_demo.tasks
-for all using (
-  workspace_id in (
-    select workspace_id from public.workspace_members where user_id = auth.uid()
-  )
-)
-with check (
-  workspace_id in (
-    select workspace_id from public.workspace_members where user_id = auth.uid()
-  )
+drop policy if exists "tasks_select" on app_demo.tasks;
+drop policy if exists "tasks_insert" on app_demo.tasks;
+drop policy if exists "tasks_update" on app_demo.tasks;
+drop policy if exists "tasks_delete" on app_demo.tasks;
+
+-- SELECT: member ws owner HOẶC member ws follower được share
+create policy "tasks_select" on app_demo.tasks
+for select using (
+  public.can_access_app_data(workspace_id, 'demo')
+);
+
+-- INSERT: cùng quyền với select (follower được ghi data vào ws owner)
+create policy "tasks_insert" on app_demo.tasks
+for insert with check (
+  public.can_access_app_data(workspace_id, 'demo')
+);
+
+-- UPDATE: cùng quyền (follower được sửa data của owner)
+create policy "tasks_update" on app_demo.tasks
+for update using (
+  public.can_access_app_data(workspace_id, 'demo')
+) with check (
+  public.can_access_app_data(workspace_id, 'demo')
+);
+
+-- DELETE: CHỈ member trực tiếp của ws owner. Follower KHÔNG xoá được.
+create policy "tasks_delete" on app_demo.tasks
+for delete using (
+  public.is_owner_workspace_member(workspace_id)
 );
 
 -- ---------- Trigger updated_at ----------
