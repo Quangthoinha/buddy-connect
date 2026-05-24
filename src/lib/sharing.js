@@ -291,8 +291,9 @@ export function useActiveScope() {
 }
 
 /**
- * React hook: fetch + cache danh sách scopes available.
- * Refetch khi gọi refresh().
+ * React hook: fetch + cache danh sách scopes available (RAW — KHÔNG filter hidden).
+ * Dùng cho admin UI quản lý hide (cần thấy cả hidden để unhide). Refetch
+ * khi gọi refresh().
  *
  * @returns {{ scopes: Array, loading: boolean, error: Error|null, refresh: () => void }}
  */
@@ -314,6 +315,40 @@ export function useAccessibleScopes() {
     scopes, loading, error,
     refresh: () => setVersion((v) => v + 1),
   };
+}
+
+/**
+ * React hook: scopes VISIBLE (đã filter hidden) cho ScopeSwitcher.
+ * Combine listAccessibleScopes + listHiddenScopes của ctx.workspaceId.
+ *
+ * @returns {{ scopes, hiddenIds: Set<string>, loading, error, refresh }}
+ */
+export function useVisibleScopes() {
+  const [data, setData] = useState({ scopes: [], hiddenIds: new Set() });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const ctx = getContext();
+    Promise.all([listAccessibleScopes(), listHiddenScopes({ workspaceId: ctx.workspaceId })])
+      .then(([scopes, hiddenArr]) => {
+        if (cancelled) return;
+        const hiddenIds = new Set(hiddenArr);
+        // Filter: ẩn các scope follower có owner trong hidden list. KHÔNG
+        // ẩn owner_member (chính ws của user) — luôn truy cập được.
+        const visible = scopes.filter(
+          (s) => s.scopeKind === 'owner_member' || !hiddenIds.has(s.workspaceId),
+        );
+        setData({ scopes: visible, hiddenIds });
+        setError(null);
+      })
+      .catch((e) => { if (!cancelled) setError(e); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [version]);
+  return { ...data, loading, error, refresh: () => setVersion((v) => v + 1) };
 }
 
 // ╔════════════════════════════════════════════════════════════════╗
@@ -371,6 +406,62 @@ export async function setWorkspaceDefaultScope({ workspaceId, defaultOwnerWorksp
     defaultOwnerWorkspaceId: data.default_owner_workspace_id,
     setAt: data.set_at,
   };
+}
+
+/**
+ * Ẩn 1 scope khỏi ScopeSwitcher của ws (owner/admin only). Scope phải ≠ default.
+ * Grant không bị xoá — chỉ ẩn UI. Members vẫn còn tech quyền truy cập DB.
+ *
+ * @param {{ workspaceId?: string, hiddenOwnerWorkspaceId: string }} args
+ */
+export async function hideScope({ workspaceId, hiddenOwnerWorkspaceId } = {}) {
+  if (!hiddenOwnerWorkspaceId) throw new Error('hideScope: hiddenOwnerWorkspaceId required');
+  const ctx = getContext();
+  const wsId = workspaceId || ctx.workspaceId;
+  const client = getPublicSupabase();
+  const { data, error } = await client.rpc('hide_app_scope', {
+    p_workspace_id: wsId,
+    p_app_slug: APP_SLUG,
+    p_hidden_owner_workspace_id: hiddenOwnerWorkspaceId,
+  });
+  if (error) throw new Error('hideScope: ' + error.message);
+  return data;
+}
+
+/**
+ * Hiện lại 1 scope đã ẩn (owner/admin only).
+ */
+export async function unhideScope({ workspaceId, hiddenOwnerWorkspaceId } = {}) {
+  if (!hiddenOwnerWorkspaceId) throw new Error('unhideScope: hiddenOwnerWorkspaceId required');
+  const ctx = getContext();
+  const wsId = workspaceId || ctx.workspaceId;
+  const client = getPublicSupabase();
+  const { data, error } = await client.rpc('unhide_app_scope', {
+    p_workspace_id: wsId,
+    p_app_slug: APP_SLUG,
+    p_hidden_owner_workspace_id: hiddenOwnerWorkspaceId,
+  });
+  if (error) throw new Error('unhideScope: ' + error.message);
+  return data === true;
+}
+
+/**
+ * List scope đang ẩn của 1 ws (mọi member đọc được qua RLS — để
+ * ScopeSwitcher filter).
+ *
+ * @returns {Promise<string[]>} array of hidden_owner_workspace_id
+ */
+export async function listHiddenScopes({ workspaceId } = {}) {
+  const ctx = getContext();
+  const wsId = workspaceId || ctx.workspaceId;
+  const client = getPublicSupabase();
+  const { data, error } = await client
+    .from('app_hidden_scopes')
+    .select('hidden_owner_workspace_id')
+    .eq('workspace_id', wsId)
+    .eq('app_slug', APP_SLUG);
+  if (error) throw new Error('listHiddenScopes: ' + error.message);
+  return (data || []).map((r) => r.hidden_owner_workspace_id);
 }
 
 /**

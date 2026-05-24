@@ -15,7 +15,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  useActiveScope, setActiveScope, useAccessibleScopes, useIsAnyWorkspaceAdmin,
+  useActiveScope, setActiveScope, useVisibleScopes, useIsAnyWorkspaceAdmin,
 } from '../lib/sharing.js';
 
 const PANEL_MAX_H = 360;
@@ -23,7 +23,9 @@ const PANEL_GAP = 6;
 
 export default function ScopeSwitcher({ onManageGrants }) {
   const active = useActiveScope();
-  const { scopes, loading, error, refresh } = useAccessibleScopes();
+  // Dùng useVisibleScopes (đã filter hidden via mig 051) — admin có thể ẩn
+  // scope từ ShareManageModal tab "Ẩn scope".
+  const { scopes, loading, error, refresh } = useVisibleScopes();
   const isAnyAdmin = useIsAnyWorkspaceAdmin();
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState('down');

@@ -23,6 +23,9 @@ import {
   getWorkspaceDefaultScope,
   setWorkspaceDefaultScope,
   unsetWorkspaceDefaultScope,
+  listHiddenScopes,
+  hideScope,
+  unhideScope,
   useAccessibleScopes,
   useActiveScope,
   useIsCurrentWorkspaceAdmin,
@@ -33,7 +36,10 @@ const BASE_TABS = [
   { id: 'redeem', label: '📥 Nhận mã' },
   { id: 'list', label: '📋 Đang chia sẻ' },
 ];
-const DEFAULT_TAB = { id: 'default', label: '⚙ Mặc định' };
+const ADMIN_TABS = [
+  { id: 'default', label: '⚙ Mặc định' },
+  { id: 'hide', label: '👁 Ẩn scope' },
+];
 
 const EXPIRE_OPTIONS = [
   { value: '1',   label: '1 giờ' },
@@ -48,9 +54,9 @@ export default function ShareManageModal({ open, onClose }) {
   const [loadingAdminWs, setLoadingAdminWs] = useState(true);
   const dialog = useDialog();
   const activeScope = useActiveScope();
-  // Default scope tab chỉ hiện cho owner/admin của ws hiện tại (ctx.workspaceId)
+  // Tab Default + Hide chỉ hiện cho owner/admin của ws hiện tại (ctx.workspaceId)
   const isCurrentWsAdmin = useIsCurrentWorkspaceAdmin();
-  const tabs = isCurrentWsAdmin ? [...BASE_TABS, DEFAULT_TAB] : BASE_TABS;
+  const tabs = isCurrentWsAdmin ? [...BASE_TABS, ...ADMIN_TABS] : BASE_TABS;
   const { refresh: refreshScopes } = useAccessibleScopes();
 
   useEffect(() => {
@@ -140,6 +146,9 @@ export default function ShareManageModal({ open, onClose }) {
         )}
         {tab === 'default' && isCurrentWsAdmin && (
           <DefaultScopeTab dialog={dialog} />
+        )}
+        {tab === 'hide' && isCurrentWsAdmin && (
+          <HideScopeTab dialog={dialog} onChanged={refreshScopes} />
         )}
       </div>
     </div>
@@ -585,3 +594,113 @@ function DefaultScopeTab({ dialog }) {
     </div>
   );
 }
+
+// ╔════════════════════════════════════════════════════════════════╗
+// ║ Tab 5 — Ẩn / hiện scope (owner/admin only)                      ║
+// ╚════════════════════════════════════════════════════════════════╝
+function HideScopeTab({ dialog, onChanged }) {
+  const ctx = getContext();
+  const [scopes, setScopes] = useState([]); // accessible scopes (raw + status hidden)
+  const [hiddenIds, setHiddenIds] = useState(new Set());
+  const [defaultId, setDefaultId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      const [scopesList, hiddenArr, defObj] = await Promise.all([
+        listAccessibleScopes(),
+        listHiddenScopes({ workspaceId: ctx.workspaceId }),
+        getWorkspaceDefaultScope({ workspaceId: ctx.workspaceId }),
+      ]);
+      // Only scope mà ctx.workspaceId là follower (không phải owner_member của ctx ws)
+      // → có thể hide. Không hide ctx ws của chính mình (data riêng phải luôn truy cập).
+      const candidates = scopesList.filter(
+        (s) => s.scopeKind === 'follower' && s.viaFollowerWorkspaceId === ctx.workspaceId,
+      );
+      setScopes(candidates);
+      setHiddenIds(new Set(hiddenArr));
+      setDefaultId(defObj?.defaultOwnerWorkspaceId || null);
+    } catch (e) {
+      await dialog.error('Không tải được', e.message);
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
+
+  async function toggle(scope) {
+    const isHidden = hiddenIds.has(scope.workspaceId);
+    const isDefault = defaultId === scope.workspaceId;
+    if (!isHidden && isDefault) {
+      await dialog.error(
+        'Không thể ẩn',
+        'Scope này đang là default. Đổi default sang scope khác (tab Mặc định) trước khi ẩn.',
+      );
+      return;
+    }
+    setBusyId(scope.workspaceId);
+    try {
+      if (isHidden) {
+        await unhideScope({ workspaceId: ctx.workspaceId, hiddenOwnerWorkspaceId: scope.workspaceId });
+      } else {
+        await hideScope({ workspaceId: ctx.workspaceId, hiddenOwnerWorkspaceId: scope.workspaceId });
+      }
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      await dialog.error(isHidden ? 'Hiện lại thất bại' : 'Ẩn thất bại', e.message);
+    } finally { setBusyId(null); }
+  }
+
+  if (loading) {
+    return <div style={{ padding: 16, fontSize: 13, opacity: 0.6 }}>Đang tải…</div>;
+  }
+  if (scopes.length === 0) {
+    return (
+      <p style={{ fontSize: 13, opacity: 0.7, textAlign: 'center', padding: '12px 0' }}>
+        Workspace của bạn chưa nhận share từ ws khác. Không có scope nào để ẩn.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, opacity: 0.7, marginTop: 0 }}>
+        Ẩn / hiện scope cho members của workspace này trong ScopeSwitcher. Hidden scope vẫn còn share grant — chỉ ẩn UI. Default scope không thể ẩn.
+      </p>
+      {scopes.map((s) => {
+        const isHidden = hiddenIds.has(s.workspaceId);
+        const isDefault = defaultId === s.workspaceId;
+        const busy = busyId === s.workspaceId;
+        return (
+          <div key={s.workspaceId} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 12px', background: 'var(--bg)', borderRadius: 12,
+            marginBottom: 6,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{s.workspaceName}</div>
+              <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>
+                Chia sẻ từ ws khác
+                {isDefault && ' · ⭐ Default'}
+                {isHidden && ' · 🙈 Đang ẩn'}
+              </div>
+            </div>
+            <button
+              type="button"
+              className={`mushy-btn ${isHidden ? 'mushy-btn--primary' : 'mushy-btn--ghost'}`}
+              style={{ padding: '6px 12px', fontSize: 12 }}
+              onClick={() => toggle(s)}
+              disabled={busy || (!isHidden && isDefault)}
+              title={!isHidden && isDefault ? 'Đổi default trước khi ẩn' : ''}
+            >
+              {busy ? <span className="mushy-spinner" /> : (isHidden ? 'Hiện lại' : 'Ẩn')}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
