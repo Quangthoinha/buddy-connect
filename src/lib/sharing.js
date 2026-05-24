@@ -146,13 +146,20 @@ export async function listShareGrants({ workspaceId } = {}) {
  * "đích nhận share"). Member thường KHÔNG xuất hiện ở đây — match với gate
  * role của RPC generate/redeem.
  *
+ * ⚠️ PHẢI filter user_id = caller. RLS workspace_members (superapp mig 004)
+ * cho phép xem workspace-mate (để hiện danh sách member ở UI khác) → query
+ * không filter sẽ trả mọi admin/owner của mọi ws bạn ở, dẫn đến duplicate.
+ *
  * @returns {Promise<Array<{ workspaceId: string, name: string, slug: string, role: 'owner'|'admin' }>>}
  */
 export async function listMyAdminWorkspaces() {
+  const ctx = getContext();
+  if (!ctx.userId) return [];
   const client = getPublicSupabase();
   const { data, error } = await client
     .from('workspace_members')
     .select('role, workspaces!inner(id, name, slug, deleted_at)')
+    .eq('user_id', ctx.userId)
     .in('role', ['owner', 'admin']);
   if (error) throw new Error('listMyAdminWorkspaces: ' + error.message);
   return (data || [])
