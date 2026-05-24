@@ -20,7 +20,7 @@
 import { getPublicSupabase } from './supabase.js';
 import { getContext } from './context.js';
 import config from '../../mushy.config.json';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 
 const APP_SLUG = config.slug;
 const STORAGE_KEY_PREFIX = 'mushy.activeScope.';
@@ -251,14 +251,26 @@ export function getActiveScope() {
 }
 
 /**
- * Set active scope. Persist + emit change.
+ * Set active scope. Default persist=true (write localStorage = user choice
+ * stick across reload). Pass persist=false khi apply workspace default scope
+ * lúc init — để mỗi lần load app fetch lại default từ server, không stick.
+ *
  * @param {{ workspaceId: string, scopeKind: string, label: string }} scope
+ * @param {{ persist?: boolean }} [opts]
  */
-export function setActiveScope(scope) {
+export function setActiveScope(scope, opts = {}) {
   if (!scope || !scope.workspaceId) throw new Error('setActiveScope: workspaceId required');
   _cached = { ...scope };
-  writeStored(_cached);
+  if (opts.persist !== false) writeStored(_cached);
   emitChange();
+}
+
+/**
+ * TRUE nếu user có manual choice trong localStorage (đã từng tap ScopeSwitcher
+ * pick 1 scope). Dùng để quyết định có apply workspace default hay không.
+ */
+function hasStoredScope() {
+  return !!readStored();
 }
 
 /**
@@ -302,4 +314,158 @@ export function useAccessibleScopes() {
     scopes, loading, error,
     refresh: () => setVersion((v) => v + 1),
   };
+}
+
+// ╔════════════════════════════════════════════════════════════════╗
+// ║ Workspace default scope (superapp mig 050)                      ║
+// ╚════════════════════════════════════════════════════════════════╝
+//
+// Owner/admin của ws X set "khi mọi user của X mở mini-app này, mặc định
+// load scope Y". Y phải = X HOẶC = 1 owner ws đã grant share cho X.
+//
+// Khi user mở app: nếu chưa có localStorage choice → load default từ server.
+// Nếu user manual switch qua ScopeSwitcher → write localStorage → từ đó về sau
+// dùng manual choice, KHÔNG follow default thay đổi.
+
+/**
+ * Đọc default scope của 1 ws cho mini-app này (qua RLS, mọi member đọc được).
+ * @param {{ workspaceId?: string }} [opts] - default ctx.workspaceId
+ * @returns {Promise<{ defaultOwnerWorkspaceId: string, setAt: string } | null>}
+ */
+export async function getWorkspaceDefaultScope({ workspaceId } = {}) {
+  const ctx = getContext();
+  const wsId = workspaceId || ctx.workspaceId;
+  const client = getPublicSupabase();
+  const { data, error } = await client
+    .from('app_default_scopes')
+    .select('default_owner_workspace_id, set_at')
+    .eq('workspace_id', wsId)
+    .eq('app_slug', APP_SLUG)
+    .maybeSingle();
+  if (error) throw new Error('getWorkspaceDefaultScope: ' + error.message);
+  if (!data) return null;
+  return {
+    defaultOwnerWorkspaceId: data.default_owner_workspace_id,
+    setAt: data.set_at,
+  };
+}
+
+/**
+ * Set default scope cho ws (owner/admin only — gate ở RPC).
+ * defaultOwnerWorkspaceId phải = workspaceId HOẶC = ws đã grant cho workspaceId.
+ *
+ * @param {{ workspaceId?: string, defaultOwnerWorkspaceId: string }} args
+ */
+export async function setWorkspaceDefaultScope({ workspaceId, defaultOwnerWorkspaceId } = {}) {
+  if (!defaultOwnerWorkspaceId) throw new Error('setWorkspaceDefaultScope: defaultOwnerWorkspaceId required');
+  const ctx = getContext();
+  const wsId = workspaceId || ctx.workspaceId;
+  const client = getPublicSupabase();
+  const { data, error } = await client.rpc('set_app_default_scope', {
+    p_workspace_id: wsId,
+    p_app_slug: APP_SLUG,
+    p_default_owner_workspace_id: defaultOwnerWorkspaceId,
+  });
+  if (error) throw new Error('setWorkspaceDefaultScope: ' + error.message);
+  return {
+    defaultOwnerWorkspaceId: data.default_owner_workspace_id,
+    setAt: data.set_at,
+  };
+}
+
+/**
+ * Bỏ default scope của 1 ws (owner/admin only).
+ */
+export async function unsetWorkspaceDefaultScope({ workspaceId } = {}) {
+  const ctx = getContext();
+  const wsId = workspaceId || ctx.workspaceId;
+  const client = getPublicSupabase();
+  const { data, error } = await client.rpc('unset_app_default_scope', {
+    p_workspace_id: wsId,
+    p_app_slug: APP_SLUG,
+  });
+  if (error) throw new Error('unsetWorkspaceDefaultScope: ' + error.message);
+  return data === true;
+}
+
+/**
+ * React hook: chạy 1 lần lúc App mount, apply workspace default scope nếu:
+ *   - User chưa có manual choice trong localStorage
+ *   - Server có set default cho ctx.workspaceId + app
+ *   - Default scope vẫn còn truy cập được (có trong listAccessibleScopes)
+ *
+ * Gọi 1 lần ở top của App.jsx (sau khi getContext() OK).
+ */
+export function useDefaultScopeInitializer() {
+  const initialized = React.useRef(false);
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+    // User đã từng switch tay → tôn trọng, không override
+    if (hasStoredScope()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const def = await getWorkspaceDefaultScope();
+        if (!def || cancelled) return;
+        // Default = ctx.workspaceId thì khỏi làm gì (đã là default rồi)
+        const ctx = getContext();
+        if (def.defaultOwnerWorkspaceId === ctx.workspaceId) return;
+        // Cross-check accessible scopes để lấy label + verify còn quyền
+        const scopes = await listAccessibleScopes();
+        if (cancelled) return;
+        const target = scopes.find((s) => s.workspaceId === def.defaultOwnerWorkspaceId);
+        if (!target) return; // grant đã bị revoke, fall back ctx.workspaceId
+        setActiveScope({
+          workspaceId: target.workspaceId,
+          scopeKind: target.scopeKind,
+          label: target.workspaceName,
+        }, { persist: false }); // KHÔNG persist — mỗi load re-check server
+      } catch {
+        // Lỗi network/server → silently fall back ctx.workspaceId
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
+
+// ╔════════════════════════════════════════════════════════════════╗
+// ║ Role gating hooks (UX layer — DB cũng gate qua RPC)             ║
+// ╚════════════════════════════════════════════════════════════════╝
+
+/**
+ * React hook: TRUE nếu user là owner/admin của ÍT NHẤT 1 workspace.
+ * Dùng để hide nút "Quản lý chia sẻ" cho member thường — họ không thao tác
+ * được gì trong modal (gen/redeem đều cần admin/owner ở 1 trong 2 phía).
+ */
+export function useIsAnyWorkspaceAdmin() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    listMyAdminWorkspaces()
+      .then((ws) => { if (!cancelled) setIsAdmin(ws.length > 0); })
+      .catch(() => { if (!cancelled) setIsAdmin(false); });
+    return () => { cancelled = true; };
+  }, []);
+  return isAdmin;
+}
+
+/**
+ * React hook: TRUE nếu user là owner/admin của workspaceId (default = ctx.workspaceId).
+ * Dùng để gate tab "Mặc định" trong modal — chỉ admin/owner ws hiện tại mới
+ * set được default scope cho ws đó.
+ */
+export function useIsCurrentWorkspaceAdmin(workspaceId) {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const ctx = getContext();
+    const targetWs = workspaceId || ctx.workspaceId;
+    listMyAdminWorkspaces()
+      .then((ws) => { if (!cancelled) setIsAdmin(ws.some((w) => w.workspaceId === targetWs)); })
+      .catch(() => { if (!cancelled) setIsAdmin(false); });
+    return () => { cancelled = true; };
+  }, [workspaceId]);
+  return isAdmin;
 }

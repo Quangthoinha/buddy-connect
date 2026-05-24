@@ -12,21 +12,28 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Select from './Select.jsx';
 import { useDialog } from './Dialog.jsx';
+import { getContext } from '../lib/context.js';
 import {
   generateShareCode,
   redeemShareCode,
   listShareGrants,
   revokeShareGrant,
   listMyAdminWorkspaces,
+  listAccessibleScopes,
+  getWorkspaceDefaultScope,
+  setWorkspaceDefaultScope,
+  unsetWorkspaceDefaultScope,
   useAccessibleScopes,
   useActiveScope,
+  useIsCurrentWorkspaceAdmin,
 } from '../lib/sharing.js';
 
-const TABS = [
+const BASE_TABS = [
   { id: 'gen', label: '🔗 Tạo mã' },
   { id: 'redeem', label: '📥 Nhận mã' },
   { id: 'list', label: '📋 Đang chia sẻ' },
 ];
+const DEFAULT_TAB = { id: 'default', label: '⚙ Mặc định' };
 
 const EXPIRE_OPTIONS = [
   { value: '1',   label: '1 giờ' },
@@ -41,6 +48,9 @@ export default function ShareManageModal({ open, onClose }) {
   const [loadingAdminWs, setLoadingAdminWs] = useState(true);
   const dialog = useDialog();
   const activeScope = useActiveScope();
+  // Default scope tab chỉ hiện cho owner/admin của ws hiện tại (ctx.workspaceId)
+  const isCurrentWsAdmin = useIsCurrentWorkspaceAdmin();
+  const tabs = isCurrentWsAdmin ? [...BASE_TABS, DEFAULT_TAB] : BASE_TABS;
   const { refresh: refreshScopes } = useAccessibleScopes();
 
   useEffect(() => {
@@ -91,7 +101,7 @@ export default function ShareManageModal({ open, onClose }) {
         )}
 
         <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -127,6 +137,9 @@ export default function ShareManageModal({ open, onClose }) {
         )}
         {tab === 'list' && (
           <ListTab activeScope={activeScope} dialog={dialog} onChanged={refreshScopes} />
+        )}
+        {tab === 'default' && isCurrentWsAdmin && (
+          <DefaultScopeTab dialog={dialog} />
         )}
       </div>
     </div>
@@ -430,6 +443,145 @@ function GrantRow({ grant, label, sub, onRevoke }) {
       >
         Thu hồi
       </button>
+    </div>
+  );
+}
+
+// ╔════════════════════════════════════════════════════════════════╗
+// ║ Tab 4 — Default scope cho workspace hiện tại (owner/admin only) ║
+// ╚════════════════════════════════════════════════════════════════╝
+function DefaultScopeTab({ dialog }) {
+  const ctx = getContext();
+  const [scopes, setScopes] = useState([]); // option list: ctx ws + ws shared TO ctx ws
+  const [currentDefault, setCurrentDefault] = useState(null); // workspaceId or null
+  const [picked, setPicked] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      const [all, def] = await Promise.all([
+        listAccessibleScopes(),
+        getWorkspaceDefaultScope({ workspaceId: ctx.workspaceId }),
+      ]);
+      // Default options chỉ gồm: ctx.workspaceId (data riêng) + ws follower (ctx WS được share TO)
+      const usable = all.filter(
+        (s) =>
+          s.workspaceId === ctx.workspaceId ||
+          (s.scopeKind === 'follower' && s.viaFollowerWorkspaceId === ctx.workspaceId),
+      );
+      setScopes(usable);
+      setCurrentDefault(def?.defaultOwnerWorkspaceId || null);
+      setPicked(def?.defaultOwnerWorkspaceId || ctx.workspaceId);
+    } catch (e) {
+      await dialog.error('Không tải được', e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, []);
+
+  async function onSave() {
+    if (!picked) return;
+    setSaving(true);
+    try {
+      await setWorkspaceDefaultScope({
+        workspaceId: ctx.workspaceId,
+        defaultOwnerWorkspaceId: picked,
+      });
+      await dialog.success(
+        'Đã set default',
+        'Mọi user của workspace này khi mở mini-app sẽ load scope đó đầu tiên (trừ khi họ đã tự switch tay).',
+      );
+      await refresh();
+    } catch (e) {
+      await dialog.error('Set default thất bại', e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onUnset() {
+    const ok = await dialog.confirm(
+      'Bỏ default scope?',
+      'Mọi user của workspace sẽ load scope của workspace của họ khi mở app.',
+      { danger: true, confirmLabel: 'Bỏ', cancelLabel: 'Huỷ' },
+    );
+    if (!ok) return;
+    setSaving(true);
+    try {
+      await unsetWorkspaceDefaultScope({ workspaceId: ctx.workspaceId });
+      await refresh();
+    } catch (e) {
+      await dialog.error('Bỏ default thất bại', e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return <div style={{ padding: 16, fontSize: 13, opacity: 0.6 }}>Đang tải…</div>;
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, opacity: 0.7, marginTop: 0 }}>
+        Set workspace nào mọi user của ws hiện tại sẽ thấy đầu tiên khi mở mini-app. Nếu user đã tự switch tay 1 lần, lựa chọn của họ sẽ override default.
+      </p>
+
+      <label className="mushy-label">Scope mặc định</label>
+      <Select
+        value={picked}
+        onChange={setPicked}
+        disabled={saving}
+        options={scopes.map((s) => ({
+          value: s.workspaceId,
+          label:
+            s.workspaceId === ctx.workspaceId
+              ? `🏠 ${s.workspaceName} (data riêng)`
+              : `⇆ ${s.workspaceName} (share)`,
+        }))}
+        placeholder="— Chọn scope —"
+      />
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        <button
+          type="button"
+          className="mushy-btn mushy-btn--primary"
+          style={{ flex: 1 }}
+          disabled={saving || !picked || picked === currentDefault}
+          onClick={onSave}
+        >
+          {saving ? 'Đang lưu…' : (currentDefault ? 'Cập nhật' : 'Set default')}
+        </button>
+        {currentDefault && (
+          <button
+            type="button"
+            className="mushy-btn mushy-btn--ghost"
+            disabled={saving}
+            onClick={onUnset}
+          >
+            Bỏ default
+          </button>
+        )}
+      </div>
+
+      {currentDefault && (
+        <div
+          style={{
+            marginTop: 14,
+            padding: 10,
+            background: 'var(--bg)',
+            borderRadius: 10,
+            fontSize: 12,
+            opacity: 0.75,
+          }}
+        >
+          Default hiện tại: <b>{scopes.find((s) => s.workspaceId === currentDefault)?.workspaceName || currentDefault.slice(0, 8)}</b>
+        </div>
+      )}
     </div>
   );
 }

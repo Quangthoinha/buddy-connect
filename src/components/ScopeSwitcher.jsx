@@ -14,7 +14,9 @@
 // auto-collapse thành label chỉ-đọc, không hiển thị dropdown.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useActiveScope, setActiveScope, useAccessibleScopes } from '../lib/sharing.js';
+import {
+  useActiveScope, setActiveScope, useAccessibleScopes, useIsAnyWorkspaceAdmin,
+} from '../lib/sharing.js';
 
 const PANEL_MAX_H = 360;
 const PANEL_GAP = 6;
@@ -22,6 +24,7 @@ const PANEL_GAP = 6;
 export default function ScopeSwitcher({ onManageGrants }) {
   const active = useActiveScope();
   const { scopes, loading, error, refresh } = useAccessibleScopes();
+  const isAnyAdmin = useIsAnyWorkspaceAdmin();
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState('down');
   const wrapRef = useRef(null);
@@ -175,7 +178,7 @@ export default function ScopeSwitcher({ onManageGrants }) {
               </button>
             );
           })}
-          {onManageGrants && (
+          {onManageGrants && isAnyAdmin && (
             <button
               type="button"
               onClick={() => { setOpen(false); onManageGrants(); }}
