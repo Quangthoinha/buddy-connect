@@ -59,9 +59,6 @@ export default function ScopeSwitcher({ onManageGrants }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Single-scope case (user chưa share gì + chỉ ở 1 ws): collapse
-  const hasMultiple = scopes.length > 1;
-
   function pick(scope) {
     setActiveScope({
       workspaceId: scope.workspaceId,
@@ -75,13 +72,16 @@ export default function ScopeSwitcher({ onManageGrants }) {
   const activeLabel = active.label || active.workspaceId.slice(0, 8);
   const activeBadge = active.scopeKind === 'follower' ? '⇆ Chia sẻ' : null;
 
+  // LUÔN click được để mở dropdown — kể cả khi single scope, vì dropdown
+  // chứa entry point "⚙ Quản lý chia sẻ" (gen/redeem code). Disable theo
+  // hasMultiple gây chicken-and-egg: user chưa nhận share → không vào được
+  // modal để nhận share.
   return (
     <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => hasMultiple && setOpen(!open)}
-        disabled={!hasMultiple}
+        onClick={() => setOpen(!open)}
         className="mushy-btn mushy-btn--ghost"
         style={{
           padding: '8px 14px',
@@ -89,10 +89,9 @@ export default function ScopeSwitcher({ onManageGrants }) {
           display: 'inline-flex',
           alignItems: 'center',
           gap: 8,
-          cursor: hasMultiple ? 'pointer' : 'default',
-          opacity: hasMultiple ? 1 : 0.85,
+          cursor: 'pointer',
         }}
-        aria-haspopup={hasMultiple ? 'listbox' : undefined}
+        aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span style={{ fontWeight: 600 }}>{activeLabel}</span>
@@ -110,10 +109,10 @@ export default function ScopeSwitcher({ onManageGrants }) {
             {activeBadge}
           </span>
         )}
-        {hasMultiple && <span style={{ fontSize: 10, opacity: 0.6 }}>▾</span>}
+        <span style={{ fontSize: 10, opacity: 0.6 }}>▾</span>
       </button>
 
-      {open && hasMultiple && (
+      {open && (
         <div
           role="listbox"
           style={{
