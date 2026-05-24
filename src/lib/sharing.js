@@ -142,6 +142,30 @@ export async function listShareGrants({ workspaceId } = {}) {
 }
 
 /**
+ * Liệt kê ws user là owner hoặc admin (để chọn làm "nguồn share" hoặc
+ * "đích nhận share"). Member thường KHÔNG xuất hiện ở đây — match với gate
+ * role của RPC generate/redeem.
+ *
+ * @returns {Promise<Array<{ workspaceId: string, name: string, slug: string, role: 'owner'|'admin' }>>}
+ */
+export async function listMyAdminWorkspaces() {
+  const client = getPublicSupabase();
+  const { data, error } = await client
+    .from('workspace_members')
+    .select('role, workspaces!inner(id, name, slug, deleted_at)')
+    .in('role', ['owner', 'admin']);
+  if (error) throw new Error('listMyAdminWorkspaces: ' + error.message);
+  return (data || [])
+    .filter((r) => r.workspaces && !r.workspaces.deleted_at)
+    .map((r) => ({
+      workspaceId: r.workspaces.id,
+      name: r.workspaces.name,
+      slug: r.workspaces.slug,
+      role: r.role,
+    }));
+}
+
+/**
  * Revoke 1 grant. Cho phép owner/admin của 1 trong 2 phía (owner ws hoặc
  * follower ws). Follower mất quyền truy cập tức thì.
  *
