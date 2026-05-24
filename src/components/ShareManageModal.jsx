@@ -614,10 +614,12 @@ function HideScopeTab({ dialog, onChanged }) {
         listHiddenScopes({ workspaceId: ctx.workspaceId }),
         getWorkspaceDefaultScope({ workspaceId: ctx.workspaceId }),
       ]);
-      // Only scope mà ctx.workspaceId là follower (không phải owner_member của ctx ws)
-      // → có thể hide. Không hide ctx ws của chính mình (data riêng phải luôn truy cập).
+      // Candidates: follower scopes (ws khác share tới ctx ws) + own ws scope.
+      // Mig 053 cho phép hide own ws (vd B pure follower của A, ẩn B để chỉ
+      // hiện A trong switcher).
       const candidates = scopesList.filter(
-        (s) => s.scopeKind === 'follower' && s.viaFollowerWorkspaceId === ctx.workspaceId,
+        (s) => (s.scopeKind === 'follower' && s.viaFollowerWorkspaceId === ctx.workspaceId)
+            || (s.scopeKind === 'owner_member' && s.workspaceId === ctx.workspaceId),
       );
       setScopes(candidates);
       setHiddenIds(new Set(hiddenArr));
@@ -682,7 +684,7 @@ function HideScopeTab({ dialog, onChanged }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>{s.workspaceName}</div>
               <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>
-                Chia sẻ từ ws khác
+                {s.scopeKind === 'owner_member' ? 'Workspace của bạn' : 'Chia sẻ từ ws khác'}
                 {isDefault && ' · ⭐ Default'}
                 {isHidden && ' · 🙈 Đang ẩn'}
               </div>
