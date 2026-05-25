@@ -81,6 +81,13 @@ export const mushyApi = {
    *   workspace trước khi mở app). Thêm `appSlug` để mở thẳng mini-app, `screen`
    *   + `recordId` để pass qua query params. Override `workspaceId` nếu push
    *   cross-workspace (rare).
+   *
+   *   ⚠️ **`data.kind` (RECOMMENDED)** — event-type slug để user mute granular.
+   *   Vd: `{ kind: 'answer_to_asker' }`, `{ kind: 'comment_reply' }`,
+   *       `{ kind: 'deadline_reminder' }`. Snake_case, semantic, stable.
+   *   Superapp lưu vào `user_notifications.kind` + cho phép user mute riêng
+   *   từng kind (Settings → Thông báo). KHÔNG truyền `kind` → default
+   *   'generic' → user chỉ mute được nguyên app, không phân loại event.
    * @param {string[]} [opts.userIds] - chỉ gửi cho subset members
    * @returns {Promise<{sent: number, tokens: number, cleaned: number, tickets: any[]}>}
    */
