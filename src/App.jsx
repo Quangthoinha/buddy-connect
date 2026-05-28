@@ -322,6 +322,7 @@ export default function App() {
   });
   const [invitedGuests, setInvitedGuests] = useState([]); // selected guest user_ids
   const [randomMode, setRandomMode] = useState('mix'); // 'mix' | 'strangers' | 'acquaintances'
+  const [guestSearchQuery, setGuestSearchQuery] = useState(''); // text query to search colleagues
   const [submittingRoom, setSubmittingRoom] = useState(false);
 
   // Host Withdraw Form state
@@ -701,11 +702,15 @@ export default function App() {
     return (maxParticipants - 1) * 3;
   }, [newRoom.max_participants]);
 
-  // Partition members into matching-tag and non-matching-tag lists for categorized creation display
+  // Partition members into matching-tag and non-matching-tag lists for categorized creation display, supporting search filters
   const sortedMembersForCreate = useMemo(() => {
     const matching = [];
     const others = [];
+    const q = guestSearchQuery.trim().toLowerCase();
+
     members.forEach(m => {
+      if (q && !m.full_name.toLowerCase().includes(q)) return;
+
       const tags = allUserTags[m.user_id] || [];
       if (tags.includes(newRoom.child_code)) {
         matching.push(m);
@@ -714,7 +719,7 @@ export default function App() {
       }
     });
     return { matching, others };
-  }, [members, allUserTags, newRoom.child_code]);
+  }, [members, allUserTags, newRoom.child_code, guestSearchQuery]);
 
   const handleParentChange = (parentCode) => {
     const parent = TAXONOMY.find(p => p.parent_code === parentCode);
@@ -741,6 +746,39 @@ export default function App() {
         `Đã chọn toàn bộ ${toSelect.length} người có chung sở thích!`
       );
     }
+  };
+
+  const setQuickTime = (type) => {
+    bridge.haptic('light');
+    const now = new Date();
+    let target = new Date();
+
+    if (type === 'today_19') {
+      target.setHours(19, 0, 0, 0);
+      if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
+    } else if (type === 'today_20') {
+      target.setHours(20, 0, 0, 0);
+      if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
+    } else if (type === 'tomorrow_8') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(8, 0, 0, 0);
+    } else if (type === 'tomorrow_17') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(17, 0, 0, 0);
+    } else if (type === 'weekend_9') {
+      const day = now.getDay();
+      const daysUntilSaturday = day === 6 ? 7 : (6 - day);
+      target.setDate(target.getDate() + daysUntilSaturday);
+      target.setHours(9, 0, 0, 0);
+    }
+
+    const year = target.getFullYear();
+    const month = String(target.getMonth() + 1).padStart(2, '0');
+    const date = String(target.getDate()).padStart(2, '0');
+    const hours = String(target.getHours()).padStart(2, '0');
+    const minutes = String(target.getMinutes()).padStart(2, '0');
+
+    setNewRoom(prev => ({ ...prev, scheduled_at: `${year}-${month}-${date}T${hours}:${minutes}` }));
   };
 
   const handleSelectRandomGuests = (type, count) => {
@@ -793,6 +831,11 @@ export default function App() {
 
     if (!newRoom.location.trim() || !newRoom.scheduled_at) {
       return dialog.error('Thiếu thông tin', 'Vui lòng nhập vị trí và chọn thời gian hẹn.');
+    }
+
+    const maxParticipants = parseInt(newRoom.max_participants);
+    if (!maxParticipants || maxParticipants < 2) {
+      return dialog.error('Sĩ số không hợp lệ', 'Sĩ số tối đa phải từ 2 người trở lên.');
     }
 
     // 4.1 Co-creation requirement: must select at least 1 guest
@@ -1721,6 +1764,13 @@ export default function App() {
                           onChange={(e) => setNewRoom(prev => ({ ...prev, scheduled_at: e.target.value }))}
                           required
                         />
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+                          <button type="button" onClick={() => setQuickTime('today_19')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>Tối nay 19h</button>
+                          <button type="button" onClick={() => setQuickTime('today_20')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>Tối nay 20h</button>
+                          <button type="button" onClick={() => setQuickTime('tomorrow_8')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>Sáng mai 8h</button>
+                          <button type="button" onClick={() => setQuickTime('tomorrow_17')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>Chiều mai 17h</button>
+                          <button type="button" onClick={() => setQuickTime('weekend_9')} style={{ fontSize: 9.5, padding: '3px 6px', background: 'rgba(15,15,18,0.03)', border: '1px solid var(--hairline)', borderRadius: 6, color: 'var(--muted)', cursor: 'pointer' }}>T7/CN 9h sáng</button>
+                        </div>
                       </div>
                       <div style={{ flex: 1 }}>
                         <label className="mushy-label">Sĩ số tối đa (cả Host)</label>
@@ -1730,7 +1780,10 @@ export default function App() {
                           min="2"
                           style={{ padding: '10px 14px', fontSize: '13.5px', minHeight: '44px' }}
                           value={newRoom.max_participants}
-                          onChange={(e) => setNewRoom(prev => ({ ...prev, max_participants: parseInt(e.target.value) || 2 }))}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNewRoom(prev => ({ ...prev, max_participants: val === '' ? '' : (parseInt(val) || '') }));
+                          }}
                           required
                         />
                       </div>
@@ -1776,26 +1829,27 @@ export default function App() {
                           </div>
 
                           <div style={{ display: 'flex', gap: 8 }}>
-                            {matchingTagMembers.length > 0 && (
-                              <button
-                                type="button"
-                                className="mushy-btn"
-                                onClick={() => handleSelectRandomGuests('same_tag', createRoomAllowedLimit)}
-                                style={{
-                                  flex: 1,
-                                  minHeight: 34,
-                                  fontSize: 11,
-                                  padding: '4px 10px',
-                                  background: 'rgba(230, 57, 70, 0.06)',
-                                  borderColor: 'rgba(230, 57, 70, 0.3)',
-                                  color: 'var(--brand)',
-                                  fontWeight: 'bold',
-                                  borderRadius: 8
-                                }}
-                              >
-                                🎲 Mời ngẫu nhiên trùng tag
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              className="mushy-btn"
+                              disabled={matchingTagMembers.length === 0}
+                              onClick={() => handleSelectRandomGuests('same_tag', createRoomAllowedLimit)}
+                              style={{
+                                flex: 1,
+                                minHeight: 34,
+                                fontSize: 11,
+                                padding: '4px 10px',
+                                background: matchingTagMembers.length === 0 ? 'rgba(15,15,18,0.03)' : 'rgba(230, 57, 70, 0.06)',
+                                borderColor: matchingTagMembers.length === 0 ? 'var(--hairline)' : 'rgba(230, 57, 70, 0.3)',
+                                color: matchingTagMembers.length === 0 ? 'var(--muted)' : 'var(--brand)',
+                                fontWeight: 'bold',
+                                borderRadius: 8,
+                                opacity: matchingTagMembers.length === 0 ? 0.6 : 1,
+                                cursor: matchingTagMembers.length === 0 ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              🎲 Mời ngẫu nhiên trùng tag ({matchingTagMembers.length})
+                            </button>
                             <button
                               type="button"
                               className="mushy-btn"
@@ -1870,6 +1924,21 @@ export default function App() {
                               );
                             })}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Search Bar for manual colleague selector */}
+                      {members.length > 0 && (
+                        <div className="search-box-container" style={{ marginBottom: 10 }}>
+                          <span className="search-icon">🔍</span>
+                          <input
+                            type="text"
+                            placeholder="Gõ tìm kiếm tên đồng nghiệp nhanh..."
+                            className="mushy-input search-input"
+                            style={{ minHeight: 38, paddingLeft: 38, fontSize: '13px', borderRadius: 10 }}
+                            value={guestSearchQuery}
+                            onChange={(e) => setGuestSearchQuery(e.target.value)}
+                          />
                         </div>
                       )}
 
