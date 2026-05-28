@@ -321,6 +321,7 @@ export default function App() {
     max_participants: 2,
   });
   const [invitedGuests, setInvitedGuests] = useState([]); // selected guest user_ids
+  const [randomMode, setRandomMode] = useState('mix'); // 'mix' | 'strangers' | 'acquaintances'
   const [submittingRoom, setSubmittingRoom] = useState(false);
 
   // Host Withdraw Form state
@@ -740,6 +741,50 @@ export default function App() {
         `Đã chọn toàn bộ ${toSelect.length} người có chung sở thích!`
       );
     }
+  };
+
+  const handleSelectRandomGuests = (type, count) => {
+    bridge.haptic('light');
+    let pool = [];
+
+    // 1. Initial filter based on tag preference
+    if (type === 'same_tag') {
+      pool = members.filter(m => {
+        const tags = allUserTags[m.user_id] || [];
+        return tags.includes(newRoom.child_code);
+      });
+    } else {
+      pool = members;
+    }
+
+    // 2. Secondary filter based on relationship profile history (stranger vs acquaintance)
+    pool = pool.filter(m => {
+      const hasInteracted = interactionHistory.some(h => 
+        (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
+        (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
+      );
+
+      if (randomMode === 'acquaintances') return hasInteracted;
+      if (randomMode === 'strangers') return !hasInteracted;
+      return true; // 'mix' mode
+    });
+
+    if (pool.length === 0) {
+      let modeName = randomMode === 'acquaintances' ? 'người quen' : 'người lạ';
+      if (randomMode === 'mix') modeName = 'thành viên';
+      return dialog.info('Không tìm thấy', `Không tìm thấy đồng nghiệp nào trong nhóm "${modeName}" để chọn.`);
+    }
+
+    // 3. Shuffle pool and apply limits
+    const shuffled = [...pool].sort(() => 0.5 - Math.random());
+    const limit = Math.min(shuffled.length, count, createRoomAllowedLimit);
+    const selected = shuffled.slice(0, limit);
+
+    setInvitedGuests(selected.map(m => m.user_id));
+    dialog.success(
+      'Đã chọn ngẫu nhiên',
+      `Đã tự động chọn ngẫu nhiên ${selected.length} đồng nghiệp (${randomMode === 'mix' ? 'lạ/quen mix' : randomMode === 'strangers' ? 'chỉ người lạ' : 'chỉ người quen'}) vào danh sách mời!`
+    );
   };
 
   // Co-creation validation & submit
@@ -1191,6 +1236,85 @@ export default function App() {
     }
   };
 
+  const handleInviteRandomActiveGuests = async (roomId, type, count) => {
+    try {
+      bridge.haptic('light');
+      const activeWs = scope.workspaceId;
+      const room = rooms.find(r => r.id === roomId);
+      if (!room) return;
+
+      const currentPending = getPendingInvitationsCount(roomId);
+      const allowedLimit = getOutboundLimit(room);
+      const roomInvs = invitations.filter(i => i.room_id === roomId);
+
+      // 1. Initial pool of uninvited members
+      let pool = members.filter(m => !roomInvs.some(i => i.receiver_id === m.user_id));
+
+      // 2. Tag filter
+      if (type === 'same_tag') {
+        pool = pool.filter(m => {
+          const tags = allUserTags[m.user_id] || [];
+          return tags.includes(room.child_code);
+        });
+      }
+
+      // 3. Social circle mix filter
+      pool = pool.filter(m => {
+        const hasInteracted = interactionHistory.some(h => 
+          (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
+          (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
+        );
+
+        if (randomMode === 'acquaintances') return hasInteracted;
+        if (randomMode === 'strangers') return !hasInteracted;
+        return true;
+      });
+
+      if (pool.length === 0) {
+        let modeName = randomMode === 'acquaintances' ? 'người quen' : 'người lạ';
+        if (randomMode === 'mix') modeName = 'thành viên';
+        return dialog.info('Không tìm thấy', `Không có ${modeName} nào phù hợp chưa được mời.`);
+      }
+
+      const remainingQuota = allowedLimit - currentPending;
+      if (remainingQuota <= 0) {
+        return dialog.error(
+          'Chặn hạn ngạch!',
+          `Không thể mời thêm. Đã đạt giới hạn pending (${currentPending}/${allowedLimit}). Vui lòng thu hồi bớt các lời mời cũ để nhường chỗ.`
+        );
+      }
+
+      // 4. Shuffle and take limit
+      const shuffled = [...pool].sort(() => 0.5 - Math.random());
+      const toInvite = shuffled.slice(0, Math.min(shuffled.length, count, remainingQuota));
+      const omittedCount = shuffled.length - toInvite.length;
+
+      const invitationsPayload = toInvite.map(m => ({
+        workspace_id: activeWs,
+        room_id: roomId,
+        receiver_id: m.user_id,
+        status: 'pending'
+      }));
+
+      const { error: err } = await db.from('invitations').insert(invitationsPayload);
+      if (err) throw err;
+
+      loadData();
+
+      const labelMode = randomMode === 'mix' ? 'lạ/quen mix' : randomMode === 'strangers' ? 'chỉ người lạ' : 'chỉ người quen';
+      if (omittedCount > 0) {
+        dialog.info(
+          'Đã gửi lời mời',
+          `Đã mời ngẫu nhiên ${toInvite.length} đồng nghiệp (${labelMode}). ${omittedCount} người còn lại không thể mời do chạm hạn ngạch pending tối đa (${allowedLimit}).`
+        );
+      } else {
+        dialog.success('Thành công', `Đã mời ngẫu nhiên ${toInvite.length} đồng nghiệp (${labelMode})!`);
+      }
+    } catch (e) {
+      dialog.error('Lỗi mời ngẫu nhiên', e.message);
+    }
+  };
+
   const handleRevokeInvitation = async (invId) => {
     try {
       bridge.haptic('light');
@@ -1618,6 +1742,84 @@ export default function App() {
                         <span style={{ color: 'var(--brand)' }}>⚠️</span> Gửi lời mời đầu tiên (Chọn ít nhất 1 người)
                       </label>
 
+                      {/* 🎲 Bộ lọc mời ngẫu nhiên và mix lạ quen */}
+                      {members.length > 0 && (
+                        <div style={{ background: '#FFFDFD', border: '1.5px solid rgba(230, 57, 70, 0.12)', borderRadius: 14, padding: 12, marginBottom: 14 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ink)' }}>🎲 Lựa chọn vòng kết nối:</span>
+                            <div className="tab-navigation" style={{ margin: 0, padding: 2, gap: 2, gridTemplateColumns: '1fr 1fr 1fr', minHeight: 28, borderRadius: 8 }}>
+                              <button
+                                type="button"
+                                className={`nav-tab-btn ${randomMode === 'mix' ? 'nav-tab-btn--active' : ''}`}
+                                style={{ padding: '2px 8px', fontSize: 10, borderRadius: 6 }}
+                                onClick={() => setRandomMode('mix')}
+                              >
+                                🌀 Mix
+                              </button>
+                              <button
+                                type="button"
+                                className={`nav-tab-btn ${randomMode === 'strangers' ? 'nav-tab-btn--active' : ''}`}
+                                style={{ padding: '2px 8px', fontSize: 10, borderRadius: 6 }}
+                                onClick={() => setRandomMode('strangers')}
+                              >
+                                🕵️ Người lạ
+                              </button>
+                              <button
+                                type="button"
+                                className={`nav-tab-btn ${randomMode === 'acquaintances' ? 'nav-tab-btn--active' : ''}`}
+                                style={{ padding: '2px 8px', fontSize: 10, borderRadius: 6 }}
+                                onClick={() => setRandomMode('acquaintances')}
+                              >
+                                👥 Quen
+                              </button>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            {matchingTagMembers.length > 0 && (
+                              <button
+                                type="button"
+                                className="mushy-btn"
+                                onClick={() => handleSelectRandomGuests('same_tag', createRoomAllowedLimit)}
+                                style={{
+                                  flex: 1,
+                                  minHeight: 34,
+                                  fontSize: 11,
+                                  padding: '4px 10px',
+                                  background: 'rgba(230, 57, 70, 0.06)',
+                                  borderColor: 'rgba(230, 57, 70, 0.3)',
+                                  color: 'var(--brand)',
+                                  fontWeight: 'bold',
+                                  borderRadius: 8
+                                }}
+                              >
+                                🎲 Mời ngẫu nhiên trùng tag
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="mushy-btn"
+                              onClick={() => {
+                                handleSelectRandomGuests('any', Math.min(3, createRoomAllowedLimit));
+                              }}
+                              style={{
+                                flex: 1,
+                                minHeight: 34,
+                                fontSize: 11,
+                                padding: '4px 10px',
+                                background: 'rgba(6, 182, 212, 0.06)',
+                                borderColor: 'rgba(6, 182, 212, 0.3)',
+                                color: '#06B6D4',
+                                fontWeight: 'bold',
+                                borderRadius: 8
+                              }}
+                            >
+                              🎲 Mời ngẫu nhiên kết bạn mới
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* 🔥 Gợi ý mời nhanh (Trùng sở thích) */}
                       {matchingTagMembers.length > 0 && (
                         <div style={{ marginBottom: 12 }}>
@@ -1859,7 +2061,7 @@ export default function App() {
                         <span className="participants-status-text">
                           Sĩ số: {totalJoined} / {room.max_participants}
                         </span>
-                      </div>
+</div>
 
                       {/* 7.1 Distributed Fault-Tolerance Group Chat Status */}
                       {room.status === 'matched' && (
@@ -1921,22 +2123,44 @@ export default function App() {
 
                             return (
                               <div style={{ marginTop: 8 }}>
-                                {matching.length > 0 ? (
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                    <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', margin: 0 }}>Mời thêm ứng viên mới:</label>
-                                    <button
-                                      type="button"
-                                      className="mushy-btn btn-glow-brand"
-                                      disabled={isQuotaExceeded}
-                                      onClick={() => handleInviteMatchingGuests(room.id)}
-                                      style={{ minHeight: 26, fontSize: 10, padding: '2px 8px' }}
-                                    >
-                                      🔥 Mời tất cả người trùng sở thích ({matching.length})
-                                    </button>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
+                                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', margin: 0 }}>Mời thêm ứng viên mới:</label>
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    {matching.length > 0 && (
+                                      <button
+                                        type="button"
+                                        className="mushy-btn btn-glow-brand"
+                                        disabled={isQuotaExceeded}
+                                        onClick={() => handleInviteMatchingGuests(room.id)}
+                                        style={{ minHeight: 26, fontSize: 10, padding: '2px 8px' }}
+                                      >
+                                        🔥 Mời tất cả trùng tag ({matching.length})
+                                      </button>
+                                    )}
+                                    {allCandidates.length > 0 && (
+                                      <button
+                                        type="button"
+                                        className="mushy-btn"
+                                        disabled={isQuotaExceeded}
+                                        onClick={() => {
+                                          const remainingQuota = currentLimit - pendingCount;
+                                          handleInviteRandomActiveGuests(room.id, 'any', Math.min(3, remainingQuota));
+                                        }}
+                                        style={{
+                                          minHeight: 26,
+                                          fontSize: 10,
+                                          padding: '2px 8px',
+                                          background: 'rgba(6, 182, 212, 0.08)',
+                                          borderColor: 'rgba(6, 182, 212, 0.3)',
+                                          color: '#06B6D4',
+                                          fontWeight: 'bold'
+                                        }}
+                                      >
+                                        🎲 Mời ngẫu nhiên ({randomMode === 'mix' ? 'mix' : randomMode === 'strangers' ? 'lạ' : 'quen'})
+                                      </button>
+                                    )}
                                   </div>
-                                ) : (
-                                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Mời thêm ứng viên mới:</label>
-                                )}
+                                </div>
 
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                   {allCandidates.length === 0 ? (
