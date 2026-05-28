@@ -329,6 +329,7 @@ export default function App() {
 
   // Cross-Workspace Sharing states
   const [showSharingModal, setShowSharingModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [shareCodeInput, setShareCodeInput] = useState('');
   const [shareGrants, setShareGrants] = useState([]);
   const [generatedCode, setGeneratedCode] = useState(null);
@@ -396,7 +397,7 @@ export default function App() {
         setMyTags((tags || []).map(t => t.child_code));
       } else {
         setHasProfile(false);
-        setActiveTab('profile'); // Force setup profile if empty
+        setShowProfileModal(true); // Force setup profile modal if empty
       }
 
       // 2. Fetch workspace members
@@ -550,8 +551,8 @@ export default function App() {
       }
 
       setHasProfile(true);
+      setShowProfileModal(false);
       await dialog.success('Đã lưu hồ sơ!', 'Thông tin kết nối của bạn đã được cập nhật thành công.');
-      setActiveTab('radar');
       loadData();
     } catch (e) {
       dialog.error('Lỗi lưu hồ sơ', e.message);
@@ -1204,7 +1205,33 @@ export default function App() {
             <p className="brand-tagline">Tự tạo phòng hẹn nhanh đi chill & thể thao</p>
           </div>
         </div>
-        <ScopeSwitcher onManageGrants={handleOpenSharing} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ScopeSwitcher onManageGrants={handleOpenSharing} />
+          <button
+            type="button"
+            className="mushy-btn"
+            style={{
+              minWidth: 40,
+              width: 40,
+              height: 40,
+              minHeight: 40,
+              borderRadius: '50%',
+              padding: 0,
+              background: 'var(--surface-muted)',
+              border: '1px solid var(--hairline)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 18,
+              cursor: 'pointer',
+              boxShadow: 'none'
+            }}
+            onClick={() => { bridge.haptic('light'); setShowProfileModal(true); }}
+            title="Thiết lập hồ sơ"
+          >
+            ⚙️
+          </button>
+        </div>
       </header>
 
       {/* Tab Navigation */}
@@ -1230,12 +1257,6 @@ export default function App() {
             <span className="notification-dot" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', marginLeft: 2 }} />
           )}
         </button>
-        <button
-          className={`nav-tab-btn ${activeTab === 'profile' ? 'nav-tab-btn--active' : ''}`}
-          onClick={() => { bridge.haptic('light'); setActiveTab('profile'); }}
-        >
-          <span>⚙️</span> Hồ Sơ
-        </button>
       </nav>
 
       {loading ? (
@@ -1254,7 +1275,7 @@ export default function App() {
                   <p className="mushy-section-sub">
                     Nhập phòng ban, cơ sở và các thẻ sở thích dạng Accordion để khởi động radar xếp hạng ưu tiên chéo cực đỉnh nào!
                   </p>
-                  <button className="mushy-btn mushy-btn--primary" onClick={() => setActiveTab('profile')}>
+                  <button className="mushy-btn mushy-btn--primary" onClick={() => { bridge.haptic('light'); setShowProfileModal(true); }}>
                     Tạo Hồ Sơ Ngay
                   </button>
                 </section>
@@ -1779,130 +1800,154 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 4: PROFILE - ACCORDION & SEARCH */}
-          {activeTab === 'profile' && (
-            <div className="tab-pane animated-fade-in">
-              <section className="mushy-card">
-                <h3 className="mushy-section-title">⚙️ Thiết lập Hồ sơ Connect</h3>
-                <p className="mushy-section-sub">Điền các thông tin hành chính chéo và chọn tối đa 200 thẻ sở thích được thiết kế dạng Accordion thả xuống tiện lợi.</p>
-
-                {/* Form fields */}
-                <div style={{ marginBottom: 12 }}>
-                  <label className="mushy-label">Phòng ban trực thuộc (Department)</label>
-                  <input
-                    type="text"
-                    className="mushy-input"
-                    placeholder="Vd: Kỹ thuật (R&D), Kinh doanh, Nhân sự..."
-                    value={myProfile.department}
-                    onChange={(e) => setMyProfile(prev => ({ ...prev, department: e.target.value }))}
-                    required
-                  />
-                </div>
-
-                <div style={{ marginBottom: 12 }}>
-                  <label className="mushy-label">Cơ sở làm việc (Facility)</label>
-                  <input
-                    type="text"
-                    className="mushy-input"
-                    placeholder="Vd: Cơ sở Hà Nội - Keangnam, Cơ sở Landmark 81..."
-                    value={myProfile.facility}
-                    onChange={(e) => setMyProfile(prev => ({ ...prev, facility: e.target.value }))}
-                    required
-                  />
-                </div>
-
-                {/* Available times multi-select */}
-                <div style={{ marginBottom: 18 }}>
-                  <label className="mushy-label">Khung giờ rảnh thông thường (Multi-select)</label>
-                  <div className="chips-container" style={{ marginTop: 6 }}>
-                    {['Giờ ăn trưa', 'Chiều sau giờ làm', 'Cuối tuần', 'Tối ngày thường'].map(time => {
-                      const isSelected = myProfile.available_times.includes(time);
-                      return (
-                        <span
-                          key={time}
-                          className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
-                          onClick={() => {
-                            if (isSelected) {
-                              setMyProfile(prev => ({ ...prev, available_times: prev.available_times.filter(t => t !== time) }));
-                            } else {
-                              setMyProfile(prev => ({ ...prev, available_times: [...prev.available_times, time] }));
-                            }
-                          }}
-                        >
-                          ⏰ {time}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* SEARCH BAR LỌC NHANH (PRD Section 2) */}
-                <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
-                  <h4 style={{ margin: '0 0 10px', fontSize: 14 }}>Hệ thống thẻ sở thích (Tag Taxonomy - Accordion & Lọc Nhanh)</h4>
-                  <div className="search-box-container">
-                    <span className="search-icon">🔍</span>
-                    <input
-                      type="text"
-                      className="mushy-input search-input"
-                      placeholder="Gõ từ khóa để lọc nhanh 200 Child Tags..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-
-                  {/* ACCORDION CATEGORY GRIDS */}
-                  <div style={{ marginTop: 12 }}>
-                    {filteredAccordionTaxonomy.length === 0 ? (
-                      <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>Không tìm thấy thẻ sở thích phù hợp.</p>
-                    ) : (
-                      filteredAccordionTaxonomy.map(parent => {
-                        const isOpen = expandedParents[parent.parent_code] || parent.isAutoExpanded;
-                        return (
-                          <div key={parent.parent_code} className="accordion-item">
-                            <div
-                              className="accordion-header"
-                              onClick={() => toggleParentAccordion(parent.parent_code)}
-                            >
-                              <span>{highlightSearchText(parent.parent_name, searchQuery)}</span>
-                              <span className={`accordion-icon ${isOpen ? 'accordion-icon--open' : ''}`}>▼</span>
-                            </div>
-
-                            {isOpen && (
-                              <div className="accordion-content">
-                                <div className="chips-container">
-                                  {parent.children.map(c => {
-                                    const isSelected = myTags.includes(c.code);
-                                    return (
-                                      <span
-                                        key={c.code}
-                                        className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
-                                        onClick={() => toggleSelectTag(c.code)}
-                                      >
-                                        {highlightSearchText(c.name, searchQuery)}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  className="mushy-btn mushy-btn--primary mushy-btn--block"
-                  style={{ marginTop: 24 }}
-                  onClick={handleSaveProfile}
-                >
-                  Lưu hồ sơ Connect 🍄
-                </button>
-              </section>
-            </div>
-          )}
         </>
+      )}
+
+      {/* PROFILE CONFIGURATION MODAL */}
+      {showProfileModal && (
+        <div className="modal-scrim dialog-scrim animated-fade-in" onClick={() => setShowProfileModal(false)}>
+          <div className="modal-card" style={{ maxWidth: 500, textAlign: 'left', display: 'flex', flexDirection: 'column', maxHeight: '90dvh' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--hairline)', paddingBottom: 10 }}>
+              <h3 className="dialog-title" style={{ fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>⚙️</span> Thiết lập Hồ sơ Connect
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setShowProfileModal(false)}
+                style={{ border: 'none', background: 'transparent', fontSize: 24, cursor: 'pointer', color: 'var(--muted)', padding: '0 4px', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4 }}>
+              <p className="mushy-section-sub" style={{ margin: '0 0 16px' }}>Điền các thông tin hành chính chéo và chọn tối đa 200 thẻ sở thích được thiết kế dạng Accordion thả xuống tiện lợi.</p>
+
+              {/* Form fields */}
+              <div style={{ marginBottom: 12 }}>
+                <label className="mushy-label">Phòng ban trực thuộc (Department)</label>
+                <input
+                  type="text"
+                  className="mushy-input"
+                  placeholder="Vd: Kỹ thuật (R&D), Kinh doanh, Nhân sự..."
+                  value={myProfile.department}
+                  onChange={(e) => setMyProfile(prev => ({ ...prev, department: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <label className="mushy-label">Cơ sở làm việc (Facility)</label>
+                <input
+                  type="text"
+                  className="mushy-input"
+                  placeholder="Vd: Cơ sở Hà Nội - Keangnam, Cơ sở Landmark 81..."
+                  value={myProfile.facility}
+                  onChange={(e) => setMyProfile(prev => ({ ...prev, facility: e.target.value }))}
+                  required
+                />
+              </div>
+
+              {/* Available times multi-select */}
+              <div style={{ marginBottom: 18 }}>
+                <label className="mushy-label">Khung giờ rảnh thông thường (Multi-select)</label>
+                <div className="chips-container" style={{ marginTop: 6 }}>
+                  {['Giờ ăn trưa', 'Chiều sau giờ làm', 'Cuối tuần', 'Tối ngày thường'].map(time => {
+                    const isSelected = myProfile.available_times.includes(time);
+                    return (
+                      <span
+                        key={time}
+                        className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                        onClick={() => {
+                          if (isSelected) {
+                            setMyProfile(prev => ({ ...prev, available_times: prev.available_times.filter(t => t !== time) }));
+                          } else {
+                            setMyProfile(prev => ({ ...prev, available_times: [...prev.available_times, time] }));
+                          }
+                        }}
+                      >
+                        ⏰ {time}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SEARCH BAR LỌC NHANH */}
+              <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 18, marginTop: 18 }}>
+                <h4 style={{ margin: '0 0 10px', fontSize: 14 }}>Hệ thống thẻ sở thích (Tag Taxonomy - Accordion & Lọc Nhanh)</h4>
+                <div className="search-box-container">
+                  <span className="search-icon">🔍</span>
+                  <input
+                    type="text"
+                    className="mushy-input search-input"
+                    placeholder="Gõ từ khóa để lọc nhanh 200 Child Tags..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+
+                {/* ACCORDION CATEGORY GRIDS */}
+                <div style={{ marginTop: 12 }}>
+                  {filteredAccordionTaxonomy.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>Không tìm thấy thẻ sở thích phù hợp.</p>
+                  ) : (
+                    filteredAccordionTaxonomy.map(parent => {
+                      const isOpen = expandedParents[parent.parent_code] || parent.isAutoExpanded;
+                      return (
+                        <div key={parent.parent_code} className="accordion-item">
+                          <div
+                            className="accordion-header"
+                            onClick={() => toggleParentAccordion(parent.parent_code)}
+                          >
+                            <span>{highlightSearchText(parent.parent_name, searchQuery)}</span>
+                            <span className={`accordion-icon ${isOpen ? 'accordion-icon--open' : ''}`}>▼</span>
+                          </div>
+
+                          {isOpen && (
+                            <div className="accordion-content">
+                              <div className="chips-container">
+                                {parent.children.map(c => {
+                                  const isSelected = myTags.includes(c.code);
+                                  return (
+                                    <span
+                                      key={c.code}
+                                      className={`selectable-chip ${isSelected ? 'selectable-chip--selected' : ''}`}
+                                      onClick={() => toggleSelectTag(c.code)}
+                                    >
+                                      {highlightSearchText(c.name, searchQuery)}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="form-actions" style={{ borderTop: '1px solid var(--hairline)', paddingTop: 14, marginTop: 14 }}>
+              <button
+                type="button"
+                className="mushy-btn mushy-btn--primary mushy-btn--block"
+                onClick={handleSaveProfile}
+              >
+                Lưu hồ sơ Connect 🍄
+              </button>
+              <button 
+                type="button"
+                className="mushy-btn mushy-btn--ghost mushy-btn--block" 
+                onClick={() => setShowProfileModal(false)}
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* HOST CANCEL WITH REASONS MODAL (PRD Section 7.2) */}
