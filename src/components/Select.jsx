@@ -19,10 +19,32 @@ export default function Select({ value, onChange, options, placeholder = '— Ch
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const [direction, setDirection] = useState('down');  // 'down' | 'up'
+  const [searchQuery, setSearchQuery] = useState('');
   const wrapRef = useRef(null);
   const triggerRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   const selected = options.find((o) => o.value === value);
+
+  // Lọc options theo từ khóa tìm kiếm
+  const filteredOptions = options.filter((o) =>
+    o.label.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Reset từ khóa khi đóng/mở panel
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('');
+      setHighlight(-1);
+    } else {
+      // Focus vào ô tìm kiếm khi mở panel
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }, 50);
+    }
+  }, [open]);
 
   // Click ngoài → đóng
   useEffect(() => {
@@ -65,13 +87,13 @@ export default function Select({ value, onChange, options, placeholder = '— Ch
         setOpen(false);
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setHighlight((h) => Math.min(options.length - 1, h + 1));
+        setHighlight((h) => Math.min(filteredOptions.length - 1, h + 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setHighlight((h) => Math.max(0, h - 1));
       } else if (e.key === 'Enter' && highlight >= 0) {
         e.preventDefault();
-        const opt = options[highlight];
+        const opt = filteredOptions[highlight];
         if (opt) {
           onChange(opt.value);
           setOpen(false);
@@ -80,7 +102,7 @@ export default function Select({ value, onChange, options, placeholder = '— Ch
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, highlight, options, onChange]);
+  }, [open, highlight, filteredOptions, onChange]);
 
   function pick(v) {
     onChange(v);
@@ -110,25 +132,72 @@ export default function Select({ value, onChange, options, placeholder = '— Ch
       </button>
 
       {open && (
-        <ul className={`mushy-select-panel mushy-select-panel--${direction}`} role="listbox">
-          {options.length === 0 ? (
-            <li className="mushy-select-empty">Không có lựa chọn</li>
-          ) : options.map((opt, i) => (
-            <li
-              key={opt.value}
-              role="option"
-              aria-selected={opt.value === value}
-              className={`mushy-select-option ${opt.value === value ? 'mushy-select-option--selected' : ''} ${i === highlight ? 'mushy-select-option--highlight' : ''}`}
-              onMouseEnter={() => setHighlight(i)}
-              onClick={() => pick(opt.value)}
+        <div className={`mushy-select-panel mushy-select-panel--${direction}`} style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
+          {options.length > 8 && (
+            <div 
+              style={{ 
+                padding: '8px 10px', 
+                borderBottom: '1px solid var(--hairline)',
+                background: 'var(--surface)',
+                position: 'sticky',
+                top: 0,
+                zIndex: 10
+              }} 
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             >
-              {opt.icon && <span className="mushy-select-icon">{opt.icon}</span>}
-              <span className="mushy-select-label">{opt.label}</span>
-              {opt.value === value && <span className="mushy-select-check">✓</span>}
-            </li>
-          ))}
-        </ul>
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="mushy-input"
+                placeholder="Gõ từ khóa để lọc nhanh..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setHighlight(-1); // Reset highlight khi tìm kiếm
+                }}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  borderRadius: '10px',
+                  border: '1.5px solid var(--hairline)',
+                  minHeight: '36px',
+                  width: '100%'
+                }}
+              />
+            </div>
+          )}
+
+          <ul 
+            role="listbox" 
+            style={{ 
+              listStyle: 'none', 
+              margin: 0, 
+              padding: '6px', 
+              overflowY: 'auto',
+              flex: 1
+            }}
+          >
+            {filteredOptions.length === 0 ? (
+              <li className="mushy-select-empty">Không có kết quả</li>
+            ) : filteredOptions.map((opt, i) => (
+              <li
+                key={opt.value}
+                role="option"
+                aria-selected={opt.value === value}
+                className={`mushy-select-option ${opt.value === value ? 'mushy-select-option--selected' : ''} ${i === highlight ? 'mushy-select-option--highlight' : ''}`}
+                onMouseEnter={() => setHighlight(i)}
+                onClick={() => pick(opt.value)}
+              >
+                {opt.icon && <span className="mushy-select-icon">{opt.icon}</span>}
+                <span className="mushy-select-label">{opt.label}</span>
+                {opt.value === value && <span className="mushy-select-check">✓</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
 }
+

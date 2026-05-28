@@ -673,6 +673,24 @@ export default function App() {
     return clashingRooms[0] || null;
   };
 
+  // Derived state for cascading selectors in room creation
+  const selectedParentCode = useMemo(() => {
+    const matched = FLAT_TAGS.find(t => t.code === newRoom.child_code);
+    return matched ? matched.parent_code : TAXONOMY[0].parent_code;
+  }, [newRoom.child_code]);
+
+  const availableChildOptions = useMemo(() => {
+    const parent = TAXONOMY.find(p => p.parent_code === selectedParentCode);
+    return parent ? parent.children.map(c => ({ value: c.code, label: c.name })) : [];
+  }, [selectedParentCode]);
+
+  const handleParentChange = (parentCode) => {
+    const parent = TAXONOMY.find(p => p.parent_code === parentCode);
+    if (parent && parent.children.length > 0) {
+      setNewRoom(prev => ({ ...prev, child_code: parent.children[0].code }));
+    }
+  };
+
   // Co-creation validation & submit
   const handleCreateRoomSubmit = async (e) => {
     e.preventDefault();
@@ -1393,13 +1411,23 @@ export default function App() {
                 {/* Create Room Form */}
                 {showCreateRoom && (
                   <form onSubmit={handleCreateRoomSubmit} style={{ marginTop: 20, borderTop: '1px solid var(--hairline)', paddingTop: 16 }}>
-                    <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label">Chủ đề Bộ môn / Sở thích</label>
-                      <Select
-                        value={newRoom.child_code}
-                        onChange={(val) => setNewRoom(prev => ({ ...prev, child_code: val }))}
-                        options={FLAT_TAGS.map(t => ({ value: t.code, label: `${t.parent_name} -> ${t.name}` }))}
-                      />
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <label className="mushy-label">Danh mục chính</label>
+                        <Select
+                          value={selectedParentCode}
+                          onChange={handleParentChange}
+                          options={TAXONOMY.map(p => ({ value: p.parent_code, label: p.parent_name }))}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label className="mushy-label">Bộ môn / Sở thích cụ thể</label>
+                        <Select
+                          value={newRoom.child_code}
+                          onChange={(val) => setNewRoom(prev => ({ ...prev, child_code: val }))}
+                          options={availableChildOptions}
+                        />
+                      </div>
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
