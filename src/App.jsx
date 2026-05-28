@@ -1306,7 +1306,11 @@ export default function App() {
                   </section>
 
                   {rankedCandidates.length === 0 ? (
-                    <div className="log-empty">Chưa quét thấy đồng nghiệp nào trùng thẻ sở thích với bạn. Hãy thử đổi sở thích hoặc chia sẻ workspace nhé!</div>
+                    <div className="mushy-empty-state animated-fade-in">
+                      <div className="mushy-empty-icon">🛰️</div>
+                      <h4 className="mushy-empty-title">Radar chưa quét thấy ai</h4>
+                      <p className="mushy-empty-desc">Không tìm thấy đồng nghiệp nào trùng thẻ sở thích với bạn. Hãy thử đổi sở thích hoặc chia sẻ workspace nhé!</p>
+                    </div>
                   ) : (
                     rankedCandidates.map(({ member, profile, tags, exactMatches, priority, isFallback, fallbackParentLabel, matchScore, hasInteracted }) => (
                       <section key={member.user_id} className="mushy-card buddy-card">
@@ -1411,15 +1415,20 @@ export default function App() {
           {/* TAB 2: ROOMS - PHÒNG HẸN KẾT NỐI */}
           {activeTab === 'rooms' && (
             <div className="tab-pane animated-fade-in">
-              <section className="mushy-card" style={{ marginBottom: 16 }}>
+              <section className="mushy-card premium-glow-card" style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h3 className="mushy-section-title" style={{ margin: 0 }}>🏆 Phòng hẹn Connect</h3>
                     <p className="mushy-section-sub" style={{ margin: '4px 0 0' }}>Tự lập hoặc tham gia phòng đi chill, thể thao cùng đồng nghiệp</p>
                   </div>
                   <button
-                    className="mushy-btn mushy-btn--primary"
-                    style={{ padding: '8px 16px', minHeight: 40 }}
+                    className={`mushy-btn ${showCreateRoom ? 'mushy-btn--ghost' : 'mushy-btn--primary'}`}
+                    style={{ 
+                      padding: '8px 16px', 
+                      minHeight: 40,
+                      color: showCreateRoom ? 'var(--brand)' : undefined,
+                      borderColor: showCreateRoom ? 'var(--brand)' : undefined
+                    }}
                     onClick={() => {
                       bridge.haptic('light');
                       setShowCreateRoom(!showCreateRoom);
@@ -1431,7 +1440,7 @@ export default function App() {
 
                 {/* Create Room Form */}
                 {showCreateRoom && (
-                  <form onSubmit={handleCreateRoomSubmit} style={{ marginTop: 20, borderTop: '1px solid var(--hairline)', paddingTop: 16 }}>
+                  <form onSubmit={handleCreateRoomSubmit} className="form-slide-down" style={{ marginTop: 20, borderTop: '1px solid var(--hairline)', paddingTop: 16 }}>
                     <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                       <div style={{ flex: 1 }}>
                         <label className="mushy-label">Danh mục chính</label>
@@ -1463,37 +1472,43 @@ export default function App() {
                       />
                     </div>
 
-                    <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label">Thời gian hẹn tổ chức</label>
-                      <input
-                        type="datetime-local"
-                        className="mushy-input"
-                        value={newRoom.scheduled_at}
-                        onChange={(e) => setNewRoom(prev => ({ ...prev, scheduled_at: e.target.value }))}
-                        required
-                      />
-                    </div>
-
-                    <div style={{ marginBottom: 12 }}>
-                      <label className="mushy-label">Sĩ số tối đa phòng (bao gồm cả Host)</label>
-                      <input
-                        type="number"
-                        className="mushy-input"
-                        min="2"
-                        value={newRoom.max_participants}
-                        onChange={(e) => setNewRoom(prev => ({ ...prev, max_participants: parseInt(e.target.value) || 2 }))}
-                        required
-                      />
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <label className="mushy-label">Thời gian hẹn tổ chức</label>
+                        <input
+                          type="datetime-local"
+                          className="mushy-input"
+                          style={{ padding: '10px 14px', fontSize: '13.5px', minHeight: '44px' }}
+                          value={newRoom.scheduled_at}
+                          onChange={(e) => setNewRoom(prev => ({ ...prev, scheduled_at: e.target.value }))}
+                          required
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label className="mushy-label">Sĩ số tối đa (cả Host)</label>
+                        <input
+                          type="number"
+                          className="mushy-input"
+                          min="2"
+                          style={{ padding: '10px 14px', fontSize: '13.5px', minHeight: '44px' }}
+                          value={newRoom.max_participants}
+                          onChange={(e) => setNewRoom(prev => ({ ...prev, max_participants: parseInt(e.target.value) || 2 }))}
+                          required
+                        />
+                      </div>
                     </div>
 
                     {/* Guest picker to enforce co-creation (PRD Section 4) */}
                     <div style={{ marginBottom: 16 }}>
-                      <label className="mushy-label" style={{ color: 'var(--brand)', fontWeight: 'bold' }}>
-                        * Gửi lời mời Connect đầu tiên (Chọn ít nhất 1 người)
+                      <label className="mushy-label" style={{ color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: 'var(--brand)' }}>⚠️</span> Gửi lời mời đầu tiên (Chọn ít nhất 1 người)
                       </label>
-                      <div className="guest-selector-scroll">
+                      <div className="guest-selector-scroll" style={{ background: 'var(--surface-muted)', border: '1.5px solid var(--hairline)' }}>
                         {members.length === 0 ? (
-                          <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0, fontStyle: 'italic' }}>Không có thành viên khả dụng để mời.</p>
+                          <div style={{ textAlign: 'center', padding: '16px 8px', color: 'var(--muted)' }}>
+                            <span style={{ fontSize: 24, display: 'block', marginBottom: 4 }}>👥💤</span>
+                            <span style={{ fontSize: 12, fontStyle: 'italic' }}>Mọi người trong Workspace hiện đều bận hoặc offline. Bạn có thể tự tạo phòng chờ trước.</span>
+                          </div>
                         ) : (
                           members.map(m => {
                             const isSelected = invitedGuests.includes(m.user_id);
@@ -1536,7 +1551,11 @@ export default function App() {
 
               {/* Rooms list */}
               {rooms.length === 0 ? (
-                <div className="log-empty">Chưa có phòng hẹn nào được tạo trong workspace. Hãy lập kèo đầu tiên nhé!</div>
+                <div className="mushy-empty-state animated-fade-in">
+                  <div className="mushy-empty-icon">🏆✨</div>
+                  <h4 className="mushy-empty-title">Chưa có phòng hẹn nào được tạo</h4>
+                  <p className="mushy-empty-desc">Hãy là người tiên phong lập kèo thể thao hoặc đi chill đầu tiên cùng các đồng nghiệp nhé!</p>
+                </div>
               ) : (
                 rooms.map(room => {
                   const isHost = room.host_id === ctx.userId;
@@ -1728,7 +1747,11 @@ export default function App() {
               </section>
 
               {invitations.filter(i => i.receiver_id === ctx.userId).length === 0 ? (
-                <div className="log-empty">Hộp thư trống. Hiện chưa có lời mời Connect nào gửi tới bạn.</div>
+                <div className="mushy-empty-state animated-fade-in">
+                  <div className="mushy-empty-icon">📥</div>
+                  <h4 className="mushy-empty-title">Hộp thư lời mời trống</h4>
+                  <p className="mushy-empty-desc">Hiện chưa có lời mời Connect nào gửi tới bạn. Hãy thử đổi sở thích hoặc chủ động lập kèo trước nhé!</p>
+                </div>
               ) : (
                 invitations
                   .filter(i => i.receiver_id === ctx.userId)
