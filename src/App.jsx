@@ -702,24 +702,34 @@ export default function App() {
     return (maxParticipants - 1) * 3;
   }, [newRoom.max_participants]);
 
-  // Partition members into matching-tag and non-matching-tag lists for categorized creation display, supporting search filters
+  // Partition members into matching-tag and non-matching-tag lists for categorized creation display, supporting search and relationship filters
   const sortedMembersForCreate = useMemo(() => {
     const matching = [];
     const others = [];
     const q = guestSearchQuery.trim().toLowerCase();
 
     members.forEach(m => {
+      // 1. Name query filter
       if (q && !m.full_name.toLowerCase().includes(q)) return;
+
+      // 2. Relationship mix filter
+      const hasInteracted = interactionHistory.some(h => 
+        (h.user_id_1 === ctx.userId && h.user_id_2 === m.user_id) ||
+        (h.user_id_1 === m.user_id && h.user_id_2 === ctx.userId)
+      );
+
+      if (randomMode === 'acquaintances' && !hasInteracted) return;
+      if (randomMode === 'strangers' && hasInteracted) return;
 
       const tags = allUserTags[m.user_id] || [];
       if (tags.includes(newRoom.child_code)) {
-        matching.push(m);
+        matching.push({ member: m, hasInteracted });
       } else {
-        others.push(m);
+        others.push({ member: m, hasInteracted });
       }
     });
     return { matching, others };
-  }, [members, allUserTags, newRoom.child_code, guestSearchQuery]);
+  }, [members, allUserTags, newRoom.child_code, guestSearchQuery, randomMode, interactionHistory, ctx.userId]);
 
   const handleParentChange = (parentCode) => {
     const parent = TAXONOMY.find(p => p.parent_code === parentCode);
@@ -1955,7 +1965,8 @@ export default function App() {
                                 🔥 Đồng nghiệp cùng sở thích ({sortedMembersForCreate.matching.length})
                               </div>
                             )}
-                            {sortedMembersForCreate.matching.map(m => {
+                            {sortedMembersForCreate.matching.map(item => {
+                              const m = item.member;
                               const isSelected = invitedGuests.includes(m.user_id);
                               return (
                                 <div
@@ -1976,7 +1987,14 @@ export default function App() {
                                   }}
                                 >
                                   <div>
-                                    <span style={{ fontSize: 13, fontWeight: 700 }}>{m.full_name}</span>
+                                    <span style={{ fontSize: 13, fontWeight: 700 }}>
+                                      {m.full_name}
+                                      {item.hasInteracted ? (
+                                        <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(230, 57, 70, 0.08)', color: 'var(--brand)', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>👥 Đã quen</span>
+                                      ) : (
+                                        <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(6, 182, 212, 0.08)', color: '#06B6D4', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>🕵️ Người lạ</span>
+                                      )}
+                                    </span>
                                     <span style={{ fontSize: 10, color: 'var(--muted)', display: 'block' }}>🔥 Trùng tag: {getTagName(newRoom.child_code)}</span>
                                   </div>
                                   <input
@@ -1998,7 +2016,8 @@ export default function App() {
                                 👥 Thành viên khác ({sortedMembersForCreate.others.length})
                               </div>
                             )}
-                            {sortedMembersForCreate.others.map(m => {
+                            {sortedMembersForCreate.others.map(item => {
+                              const m = item.member;
                               const isSelected = invitedGuests.includes(m.user_id);
                               return (
                                 <div
@@ -2018,7 +2037,16 @@ export default function App() {
                                     }
                                   }}
                                 >
-                                  <span style={{ fontSize: 13, fontWeight: 500 }}>{m.full_name}</span>
+                                  <div>
+                                    <span style={{ fontSize: 13, fontWeight: 500 }}>
+                                      {m.full_name}
+                                      {item.hasInteracted ? (
+                                        <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(230, 57, 70, 0.08)', color: 'var(--brand)', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>👥 Đã quen</span>
+                                      ) : (
+                                        <span style={{ fontSize: 9.5, padding: '1px 6px', background: 'rgba(6, 182, 212, 0.08)', color: '#06B6D4', borderRadius: 4, marginLeft: 6, fontWeight: 'bold' }}>🕵️ Người lạ</span>
+                                      )}
+                                    </span>
+                                  </div>
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
