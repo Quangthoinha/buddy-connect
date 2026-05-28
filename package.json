@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "dev:setup": "node scripts/setup.js",
     "dev:seed": "node scripts/seed.js",
+    "dev:seed-connect": "node scripts/seed_connect.js",
     "dev:token": "node scripts/refresh-token.js"
   },
   "dependencies": {
