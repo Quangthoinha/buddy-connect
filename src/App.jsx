@@ -685,10 +685,60 @@ export default function App() {
     return parent ? parent.children.map(c => ({ value: c.code, label: c.name })) : [];
   }, [selectedParentCode]);
 
+  // Derived matching members for the selected tag during room creation
+  const matchingTagMembers = useMemo(() => {
+    if (!newRoom.child_code) return [];
+    return members.filter(m => {
+      const tags = allUserTags[m.user_id] || [];
+      return tags.includes(newRoom.child_code);
+    });
+  }, [newRoom.child_code, members, allUserTags]);
+
+  // Derived outbound limit during room creation
+  const createRoomAllowedLimit = useMemo(() => {
+    const maxParticipants = parseInt(newRoom.max_participants) || 2;
+    return (maxParticipants - 1) * 3;
+  }, [newRoom.max_participants]);
+
+  // Partition members into matching-tag and non-matching-tag lists for categorized creation display
+  const sortedMembersForCreate = useMemo(() => {
+    const matching = [];
+    const others = [];
+    members.forEach(m => {
+      const tags = allUserTags[m.user_id] || [];
+      if (tags.includes(newRoom.child_code)) {
+        matching.push(m);
+      } else {
+        others.push(m);
+      }
+    });
+    return { matching, others };
+  }, [members, allUserTags, newRoom.child_code]);
+
   const handleParentChange = (parentCode) => {
     const parent = TAXONOMY.find(p => p.parent_code === parentCode);
     if (parent && parent.children.length > 0) {
       setNewRoom(prev => ({ ...prev, child_code: parent.children[0].code }));
+    }
+  };
+
+  const handleSelectAllMatchingTagMembers = () => {
+    bridge.haptic('light');
+    if (matchingTagMembers.length === 0) return;
+
+    const toSelect = matchingTagMembers.slice(0, createRoomAllowedLimit);
+    setInvitedGuests(toSelect.map(m => m.user_id));
+
+    if (matchingTagMembers.length > createRoomAllowedLimit) {
+      dialog.info(
+        'Đã chọn giới hạn',
+        `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người (hạn ngạch pending của phòng sỹ số ${newRoom.max_participants} là ${createRoomAllowedLimit}). Đã tự động chọn ${createRoomAllowedLimit} người đầu tiên trùng sở thích.`
+      );
+    } else {
+      dialog.success(
+        'Đã chọn tất cả',
+        `Đã chọn toàn bộ ${toSelect.length} người có chung sở thích!`
+      );
     }
   };
 
@@ -703,6 +753,10 @@ export default function App() {
     // 4.1 Co-creation requirement: must select at least 1 guest
     if (invitedGuests.length === 0) {
       return dialog.error('Ràng buộc tạo phòng', 'Hệ thống bắt buộc Host phải chọn ít nhất 1 người để gửi lời mời đầu tiên thì mới cho phép tạo phòng, tránh phòng mồ côi!');
+    }
+
+    if (invitedGuests.length > createRoomAllowedLimit) {
+      return dialog.error('Vượt quá hạn ngạch', `Số người được mời (${invitedGuests.length}) vượt quá số lượng pending tối đa cho phép (${createRoomAllowedLimit}) cho phòng này.`);
     }
 
     setSubmittingRoom(true);
@@ -1074,6 +1128,66 @@ export default function App() {
       loadData();
     } catch (e) {
       dialog.error('Lỗi mời thêm', e.message);
+    }
+  };
+
+  const handleInviteMatchingGuests = async (roomId) => {
+    try {
+      bridge.haptic('light');
+      const activeWs = scope.workspaceId;
+      const room = rooms.find(r => r.id === roomId);
+      if (!room) return;
+
+      const currentPending = getPendingInvitationsCount(roomId);
+      const allowedLimit = getOutboundLimit(room);
+      const roomInvs = invitations.filter(i => i.room_id === roomId);
+
+      // Find all members who have matching tags
+      const matchingMembers = members.filter(m => {
+        // Not invited yet
+        if (roomInvs.some(i => i.receiver_id === m.user_id)) return false;
+        // Has matching tag
+        const tags = allUserTags[m.user_id] || [];
+        return tags.includes(room.child_code);
+      });
+
+      if (matchingMembers.length === 0) {
+        return dialog.info('Không tìm thấy', 'Không có thành viên nào khác trong workspace có chung tag này chưa được mời.');
+      }
+
+      const remainingQuota = allowedLimit - currentPending;
+      if (remainingQuota <= 0) {
+        return dialog.error(
+          'Chặn hạn ngạch!',
+          `Không thể mời thêm. Đã đạt giới hạn pending (${currentPending}/${allowedLimit}). Vui lòng bấm nút [Thu hồi] các lời mời cũ để nhường chỗ.`
+        );
+      }
+
+      const toInvite = matchingMembers.slice(0, remainingQuota);
+      const omittedCount = matchingMembers.length - toInvite.length;
+
+      const invitationsPayload = toInvite.map(m => ({
+        workspace_id: activeWs,
+        room_id: roomId,
+        receiver_id: m.user_id,
+        status: 'pending'
+      }));
+
+      const { error: err } = await db.from('invitations').insert(invitationsPayload);
+      if (err) throw err;
+
+      loadData();
+
+      if (omittedCount > 0) {
+        dialog.info(
+          'Đã gửi lời mời',
+          `Đã gửi lời mời đến ${toInvite.length} người có chung sở thích. ${omittedCount} người còn lại không thể mời do chạm hạn ngạch pending tối đa (${allowedLimit}).`
+        );
+      } else {
+        dialog.success('Thành công', `Đã gửi lời mời đến ${toInvite.length} người có chung sở thích!`);
+      }
+    } catch (e) {
+      dialog.error('Lỗi mời hàng loạt', e.message);
     }
   };
 
@@ -1503,45 +1617,168 @@ export default function App() {
                       <label className="mushy-label" style={{ color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ color: 'var(--brand)' }}>⚠️</span> Gửi lời mời đầu tiên (Chọn ít nhất 1 người)
                       </label>
+
+                      {/* 🔥 Gợi ý mời nhanh (Trùng sở thích) */}
+                      {matchingTagMembers.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div className="matching-tags-header">
+                            <span>🔥 Gợi ý mời nhanh (Trùng sở thích {FLAT_TAGS.find(t => t.code === newRoom.child_code)?.name || ''}):</span>
+                            <button
+                              type="button"
+                              className="mushy-btn"
+                              onClick={handleSelectAllMatchingTagMembers}
+                              style={{
+                                minHeight: 24,
+                                fontSize: 10,
+                                padding: '2px 8px',
+                                marginLeft: 'auto',
+                                background: 'linear-gradient(135deg, var(--brand) 0%, var(--pink) 100%)',
+                                border: 'none',
+                                color: '#fff',
+                                fontWeight: 'bold',
+                                borderRadius: 6
+                              }}
+                            >
+                              ✨ Chọn tất cả ({matchingTagMembers.length})
+                            </button>
+                          </div>
+                          <div className="matching-tags-chip-container">
+                            {matchingTagMembers.map(m => {
+                              const isSelected = invitedGuests.includes(m.user_id);
+                              return (
+                                <div
+                                  key={m.user_id}
+                                  className={`matching-tag-chip ${isSelected ? 'matching-tag-chip--selected' : ''}`}
+                                  onClick={() => {
+                                    bridge.haptic('light');
+                                    if (isSelected) {
+                                      setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
+                                    } else {
+                                      if (invitedGuests.length >= createRoomAllowedLimit) {
+                                        dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
+                                        return;
+                                      }
+                                      setInvitedGuests(prev => [...prev, m.user_id]);
+                                    }
+                                  }}
+                                >
+                                  <span>👤 {m.full_name}</span>
+                                  {isSelected && <span>✓</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="guest-selector-scroll" style={{ background: 'var(--surface-muted)', border: '1.5px solid var(--hairline)' }}>
                         {members.length === 0 ? (
                           <div style={{ textAlign: 'center', padding: '16px 8px', color: 'var(--muted)' }}>
                             <span style={{ fontSize: 24, display: 'block', marginBottom: 4 }}>👥💤</span>
-                            <span style={{ fontSize: 12, fontStyle: 'italic' }}>Mọi người trong Workspace hiện đều bận hoặc offline. Bạn có thể tự tạo phòng chờ trước.</span>
+                            <span style={{ fontSize: 12, fontStyle: 'italic' }}>Mọi người trong Workspace hiện đều bận hoặc offline.</span>
                           </div>
                         ) : (
-                          members.map(m => {
-                            const isSelected = invitedGuests.includes(m.user_id);
-                            return (
-                              <div
-                                key={m.user_id}
-                                className={`guest-select-item ${isSelected ? 'guest-select-item--selected' : ''}`}
-                                onClick={() => {
-                                  if (isSelected) {
-                                    setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
-                                  } else {
-                                    setInvitedGuests(prev => [...prev, m.user_id]);
-                                  }
-                                }}
-                              >
-                                <span style={{ fontSize: 13, fontWeight: 600 }}>{m.full_name}</span>
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  readOnly
-                                  style={{ accentColor: 'var(--brand)' }}
-                                />
+                          <>
+                            {sortedMembersForCreate.matching.length > 0 && (
+                              <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 'bold', color: 'var(--brand)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                🔥 Đồng nghiệp cùng sở thích ({sortedMembersForCreate.matching.length})
                               </div>
-                            );
-                          })
+                            )}
+                            {sortedMembersForCreate.matching.map(m => {
+                              const isSelected = invitedGuests.includes(m.user_id);
+                              return (
+                                <div
+                                  key={m.user_id}
+                                  className={`guest-select-item ${isSelected ? 'guest-select-item--selected' : ''}`}
+                                  style={{ borderLeft: '3px solid var(--brand)', marginLeft: 4, marginRight: 4 }}
+                                  onClick={() => {
+                                    bridge.haptic('light');
+                                    if (isSelected) {
+                                      setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
+                                    } else {
+                                      if (invitedGuests.length >= createRoomAllowedLimit) {
+                                        dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
+                                        return;
+                                      }
+                                      setInvitedGuests(prev => [...prev, m.user_id]);
+                                    }
+                                  }}
+                                >
+                                  <div>
+                                    <span style={{ fontSize: 13, fontWeight: 700 }}>{m.full_name}</span>
+                                    <span style={{ fontSize: 10, color: 'var(--muted)', display: 'block' }}>🔥 Trùng tag: {getTagName(newRoom.child_code)}</span>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    readOnly
+                                    style={{ accentColor: 'var(--brand)' }}
+                                  />
+                                </div>
+                              );
+                            })}
+
+                            {sortedMembersForCreate.matching.length > 0 && sortedMembersForCreate.others.length > 0 && (
+                              <div style={{ margin: '8px 12px 4px', borderTop: '1px solid var(--hairline)' }} />
+                            )}
+
+                            {sortedMembersForCreate.others.length > 0 && (
+                              <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 'bold', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                👥 Thành viên khác ({sortedMembersForCreate.others.length})
+                              </div>
+                            )}
+                            {sortedMembersForCreate.others.map(m => {
+                              const isSelected = invitedGuests.includes(m.user_id);
+                              return (
+                                <div
+                                  key={m.user_id}
+                                  className={`guest-select-item ${isSelected ? 'guest-select-item--selected' : ''}`}
+                                  style={{ marginLeft: 4, marginRight: 4 }}
+                                  onClick={() => {
+                                    bridge.haptic('light');
+                                    if (isSelected) {
+                                      setInvitedGuests(prev => prev.filter(id => id !== m.user_id));
+                                    } else {
+                                      if (invitedGuests.length >= createRoomAllowedLimit) {
+                                        dialog.error('Hạn ngạch đầy!', `Chỉ có thể mời tối đa ${createRoomAllowedLimit} người cho phòng này.`);
+                                        return;
+                                      }
+                                      setInvitedGuests(prev => [...prev, m.user_id]);
+                                    }
+                                  }}
+                                >
+                                  <span style={{ fontSize: 13, fontWeight: 500 }}>{m.full_name}</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    readOnly
+                                    style={{ accentColor: 'var(--brand)' }}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </>
                         )}
                       </div>
+
+                      {/* Thống kê hạn ngạch */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
+                        <span>Đã chọn: <strong>{invitedGuests.length}</strong> người</span>
+                        <span className={invitedGuests.length > createRoomAllowedLimit ? 'quota-indicator--warning' : ''}>
+                          Hạn ngạch pending tối đa: <strong>{createRoomAllowedLimit}</strong> người
+                        </span>
+                      </div>
+                      {invitedGuests.length > createRoomAllowedLimit && (
+                        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--danger)', fontWeight: 600 }}>
+                          ⚠️ Số người được mời vượt hạn ngạch tối đa. Vui lòng bỏ chọn bớt hoặc nâng sĩ số phòng!
+                        </div>
+                      )}
                     </div>
 
                     <button
                       type="submit"
                       className="mushy-btn mushy-btn--primary mushy-btn--block"
-                      disabled={submittingRoom || invitedGuests.length === 0}
+                      disabled={submittingRoom || invitedGuests.length === 0 || invitedGuests.length > createRoomAllowedLimit}
                     >
                       {submittingRoom ? <span className="mushy-spinner" /> : 'Xác nhận tạo phòng & Gửi lời mời 🚀'}
                     </button>
@@ -1667,31 +1904,72 @@ export default function App() {
                           </div>
 
                           {/* Invite more candidates drop grid */}
-                          {!isFull && room.status !== 'matched' && (
-                            <div style={{ marginTop: 8 }}>
-                              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Mời thêm ứng viên mới:</label>
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                {members
-                                  .filter(m => !roomInvs.some(i => i.receiver_id === m.user_id))
-                                  .map(m => (
+                          {!isFull && room.status !== 'matched' && (() => {
+                            const matching = [];
+                            const others = [];
+
+                            members.filter(m => !roomInvs.some(i => i.receiver_id === m.user_id)).forEach(m => {
+                              const tags = allUserTags[m.user_id] || [];
+                              if (tags.includes(room.child_code)) {
+                                matching.push({ member: m, isMatch: true });
+                              } else {
+                                others.push({ member: m, isMatch: false });
+                              }
+                            });
+
+                            const allCandidates = [...matching, ...others];
+
+                            return (
+                              <div style={{ marginTop: 8 }}>
+                                {matching.length > 0 ? (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                    <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', margin: 0 }}>Mời thêm ứng viên mới:</label>
                                     <button
-                                      key={m.user_id}
-                                      className="mushy-btn mushy-btn--ghost"
+                                      type="button"
+                                      className="mushy-btn btn-glow-brand"
                                       disabled={isQuotaExceeded}
-                                      style={{ padding: '4px 8px', minHeight: 30, fontSize: 11 }}
-                                      onClick={() => handleInviteAdditionalGuest(room.id, m.user_id)}
+                                      onClick={() => handleInviteMatchingGuests(room.id)}
+                                      style={{ minHeight: 26, fontSize: 10, padding: '2px 8px' }}
                                     >
-                                      + {m.full_name}
+                                      🔥 Mời tất cả người trùng sở thích ({matching.length})
                                     </button>
-                                  ))}
+                                  </div>
+                                ) : (
+                                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Mời thêm ứng viên mới:</label>
+                                )}
+
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                  {allCandidates.length === 0 ? (
+                                    <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--muted)' }}>Không còn thành viên nào khả dụng để mời.</span>
+                                  ) : (
+                                    allCandidates.map(({ member: m, isMatch }) => (
+                                      <button
+                                        key={m.user_id}
+                                        className={`mushy-btn ${isMatch ? 'badge-tag-match' : 'mushy-btn--ghost'}`}
+                                        disabled={isQuotaExceeded}
+                                        style={{
+                                          padding: '4px 8px',
+                                          minHeight: 30,
+                                          fontSize: 11,
+                                          borderColor: isMatch ? 'var(--brand)' : undefined,
+                                          fontWeight: isMatch ? 700 : undefined
+                                        }}
+                                        onClick={() => handleInviteAdditionalGuest(room.id, m.user_id)}
+                                        title={isMatch ? `Đồng nghiệp trùng sở thích: ${getTagName(room.child_code)}` : undefined}
+                                      >
+                                        {isMatch ? '🔥 ' : '+ '} {m.full_name}
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                                {isQuotaExceeded && (
+                                  <p style={{ fontSize: 10, color: 'var(--danger)', margin: '4px 0 0' }}>
+                                    ⚠️ Đã đạt giới hạn pending ({pendingCount}). Vui lòng thu hồi bớt các lời mời cũ bên dưới để có thể mời tiếp.
+                                  </p>
+                                )}
                               </div>
-                              {isQuotaExceeded && (
-                                <p style={{ fontSize: 10, color: 'var(--danger)', margin: '4px 0 0' }}>
-                                  ⚠️ Đã đạt giới hạn pending ({pendingCount}). Vui lòng thu hồi bớt các lời mời cũ bên dưới để có thể mời tiếp.
-                                </p>
-                              )}
-                            </div>
-                          )}
+                            );
+                          })()}
 
                           {/* Display pending list with Revoke option */}
                           {roomInvs.filter(i => i.status === 'pending').length > 0 && (
