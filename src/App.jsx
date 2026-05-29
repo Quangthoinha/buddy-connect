@@ -390,6 +390,10 @@ export default function App() {
           .select('child_code', { count: 'exact', head: true })
           .eq('workspace_id', activeWs);
 
+        if (checkTagsErr) {
+          console.error('Lỗi kiểm tra tags danh mục:', checkTagsErr);
+        }
+
         if (!checkTagsErr && (count === null || count < 200)) {
           console.log('⚡ Taxonomy missing or incomplete. Auto-seeding/upserting 200 tags...');
           const tagsToInsert = [];
@@ -408,6 +412,7 @@ export default function App() {
           const { error: seedErr } = await db.from('tags').upsert(tagsToInsert, { onConflict: 'workspace_id,child_code' });
           if (seedErr) {
             console.error('Lỗi tự động seed tags:', seedErr);
+            dialog.error('Lỗi khởi tạo danh mục', `Không thể ghi danh mục sở thích: ${seedErr.message} (Code: ${seedErr.code})`);
           } else {
             console.log('✓ Tự động seed 200 tags thành công cho workspace!');
           }
@@ -702,7 +707,11 @@ export default function App() {
           .select('child_code', { count: 'exact', head: true })
           .eq('workspace_id', activeWs);
 
-        if (!checkTagsErr && (count === null || count < 200)) {
+        if (checkTagsErr) {
+          throw new Error(`Kiểm tra danh mục thẻ thất bại: ${checkTagsErr.message} (Code: ${checkTagsErr.code})`);
+        }
+
+        if (count === null || count < 200) {
           console.log('⚡ Saving profile: tags incomplete. Auto-upserting 200 tags...');
           const tagsToInsert = [];
           TAXONOMY.forEach(parent => {
@@ -716,10 +725,13 @@ export default function App() {
               });
             });
           });
-          await db.from('tags').upsert(tagsToInsert, { onConflict: 'workspace_id,child_code' });
+          const { error: seedErr } = await db.from('tags').upsert(tagsToInsert, { onConflict: 'workspace_id,child_code' });
+          if (seedErr) {
+            throw new Error(`Khởi tạo danh mục thẻ thất bại: ${seedErr.message} (Code: ${seedErr.code})`);
+          }
         }
       } catch (checkErr) {
-        console.warn('Lỗi kiểm tra tags khi lưu:', checkErr);
+        throw new Error(`Không thể đồng bộ danh mục thẻ sở thích vào Database: ${checkErr.message}`);
       }
 
       // 1. Upsert profile
