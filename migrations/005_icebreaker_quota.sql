@@ -1,13 +1,16 @@
 -- Migration 005: Thêm quota cho icebreaker API
 CREATE TABLE IF NOT EXISTS app_buddy_connect.icebreaker_quotas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  workspace_id UUID NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL,
+  workspace_id UUID NOT NULL,
   used_count INT DEFAULT 0,
   max_count INT DEFAULT 10,
   last_reset TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE (user_id, workspace_id)
 );
+
+-- Index bắt buộc trên cột workspace_id để tối ưu hóa truy vấn cô lập dữ liệu
+CREATE INDEX IF NOT EXISTS idx_icebreaker_quotas_workspace ON app_buddy_connect.icebreaker_quotas (workspace_id);
 
 -- Grant privileges
 GRANT SELECT, INSERT, UPDATE, DELETE ON app_buddy_connect.icebreaker_quotas TO authenticated;
