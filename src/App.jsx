@@ -332,6 +332,13 @@ export default function App() {
   // Cross-Workspace Sharing states
   const [showSharingModal, setShowSharingModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // Quick Invite states
+  const [quickInviteData, setQuickInviteData] = useState(null); // { member, tagCode, tagName }
+  const [quickInviteLocation, setQuickInviteLocation] = useState('Căn tin công ty');
+  const [quickInviteTime, setQuickInviteTime] = useState('');
+  const [submittingQuickInvite, setSubmittingQuickInvite] = useState(false);
+
   const [shareCodeInput, setShareCodeInput] = useState('');
   const [shareGrants, setShareGrants] = useState([]);
   const [generatedCode, setGeneratedCode] = useState(null);
@@ -404,7 +411,50 @@ export default function App() {
 
       // 2. Fetch workspace members
       const workspaceMembers = await listMembers(activeWs);
-      setMembers(workspaceMembers.filter(m => m.user_id !== ctx.userId));
+
+      // Generate 200 mock colleagues for scale testing in local development
+      const mockMembers = [];
+      const mockProfs = {};
+      const mockTags = {};
+      
+      const firstNames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Huỳnh', 'Phan', 'Vũ', 'Võ', 'Đặng', 'Bùi', 'Đỗ', 'Hồ', 'Ngô'];
+      const middleNames = ['Văn', 'Thị', 'Đăng', 'Minh', 'Ngọc', 'Hữu', 'Phương', 'Khánh', 'Anh', 'Hoàng', 'Thế', 'Quốc'];
+      const lastNames = ['Hùng', 'Dung', 'Tuấn', 'Hà', 'Nam', 'Tú', 'Linh', 'Lan', 'Sơn', 'Hải', 'Thành', 'Trang', 'Tuyết', 'Nhung', 'Phong', 'Lộc', 'Khang', 'Bảo', 'Vy', 'Yến'];
+      const depts = ['Kỹ thuật (R&D)', 'Kinh doanh (Sales)', 'Nhân sự (HR)', 'Marketing', 'Thiết kế (UI/UX)', 'Chăm sóc khách hàng (CS)', 'Tài chính (Finance)'];
+      const facs = ['Cơ sở Hà Nội - Keangnam', 'Cơ sở TP.HCM - Landmark 81', 'Cơ sở Đà Nẵng - Hải Châu'];
+      const times = ['Giờ ăn trưa', 'Chiều sau giờ làm', 'Cuối tuần', 'Tối ngày thường'];
+
+      for (let i = 0; i < 200; i++) {
+        const mockId = `mock-user-uuid-${1000 + i}`;
+        const name = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${middleNames[Math.floor(Math.random() * middleNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+        
+        mockMembers.push({
+          user_id: mockId,
+          role: 'member',
+          full_name: name,
+          avatar_url: null,
+          work_phone: `0987654${String(100 + i).slice(-3)}`
+        });
+
+        mockProfs[mockId] = {
+          user_id: mockId,
+          workspace_id: activeWs,
+          department: depts[Math.floor(Math.random() * depts.length)],
+          facility: facs[Math.floor(Math.random() * facs.length)],
+          available_times: [times[Math.floor(Math.random() * times.length)], times[Math.floor(Math.random() * times.length)]].filter((v, idx, self) => self.indexOf(v) === idx)
+        };
+
+        // Each mock colleague gets 1 to 3 random tags
+        const numTags = Math.floor(Math.random() * 3) + 1; // 1 to 3 tags
+        const randomTags = [];
+        const shuffledFlatTags = [...FLAT_TAGS].sort(() => 0.5 - Math.random());
+        for (let t = 0; t < numTags; t++) {
+          randomTags.push(shuffledFlatTags[t].code);
+        }
+        mockTags[mockId] = randomTags;
+      }
+
+      setMembers([...workspaceMembers.filter(m => m.user_id !== ctx.userId), ...mockMembers]);
 
       // 3. Fetch all profiles & tags in workspace to build match registry
       const { data: allProfs } = await db
@@ -415,7 +465,7 @@ export default function App() {
       if (allProfs) {
         allProfs.forEach(p => { profMap[p.user_id] = p; });
       }
-      setAllProfiles(profMap);
+      setAllProfiles({ ...profMap, ...mockProfs });
 
       const { data: allTags } = await db
         .from('user_tags')
@@ -428,7 +478,7 @@ export default function App() {
           tagsMap[t.user_id].push(t.child_code);
         });
       }
-      setAllUserTags(tagsMap);
+      setAllUserTags({ ...tagsMap, ...mockTags });
 
       // 4. Fetch interaction history
       const { data: history } = await db
@@ -561,17 +611,151 @@ export default function App() {
     }
   };
 
+  // --- Quick Invite helper options & handlers ---
+  const quickTimeOptions = useMemo(() => {
+    const now = new Date();
+    const options = [];
+    
+    // 1. Trưa nay / trưa mai (12:00)
+    const lunch = new Date(now);
+    lunch.setHours(12, 0, 0, 0);
+    if (lunch.getTime() < now.getTime()) {
+      lunch.setDate(lunch.getDate() + 1);
+      options.push({ label: 'Trưa mai (12:00)', value: lunch.toISOString(), icon: '🍲' });
+    } else {
+      options.push({ label: 'Trưa nay (12:00)', value: lunch.toISOString(), icon: '🍲' });
+    }
+
+    // 2. Chiều nay / chiều mai (17:30)
+    const evening = new Date(now);
+    evening.setHours(17, 30, 0, 0);
+    if (evening.getTime() < now.getTime()) {
+      evening.setDate(evening.getDate() + 1);
+      options.push({ label: 'Chiều mai (17:30)', value: evening.toISOString(), icon: '🏸' });
+    } else {
+      options.push({ label: 'Chiều nay (17:30)', value: evening.toISOString(), icon: '🏸' });
+    }
+
+    // 3. Tối nay / tối mai (19:30)
+    const night = new Date(now);
+    night.setHours(19, 30, 0, 0);
+    if (night.getTime() < now.getTime()) {
+      night.setDate(night.getDate() + 1);
+      options.push({ label: 'Tối mai (19:30)', value: night.toISOString(), icon: '☕' });
+    } else {
+      options.push({ label: 'Tối nay (19:30)', value: night.toISOString(), icon: '☕' });
+    }
+
+    // 4. Sáng mai (08:30)
+    const morning = new Date(now);
+    morning.setDate(morning.getDate() + 1);
+    morning.setHours(8, 30, 0, 0);
+    options.push({ label: 'Sáng mai (08:30)', value: morning.toISOString(), icon: '🏃' });
+
+    return options;
+  }, [quickInviteData]);
+
+  const handleQuickInviteSubmit = async () => {
+    if (!quickInviteTime) {
+      return dialog.error('Thiếu thông tin', 'Vui lòng chọn thời gian hẹn nhanh!');
+    }
+
+    setSubmittingQuickInvite(true);
+    try {
+      bridge.haptic('medium');
+      const activeWs = scope.workspaceId;
+
+      // 1. Create a room instantly
+      const { data: room, error: roomErr } = await db
+        .from('rooms')
+        .insert({
+          workspace_id: activeWs,
+          host_id: ctx.userId,
+          child_code: quickInviteData.tagCode,
+          location: quickInviteLocation,
+          scheduled_at: quickInviteTime,
+          max_participants: 2,
+          status: 'filling',
+        })
+        .select()
+        .single();
+
+      if (roomErr) throw roomErr;
+
+      // 2. Add host as a participant automatically
+      await db.from('activity_participants').insert({
+        activity_id: room.id,
+        user_id: ctx.userId,
+        workspace_id: activeWs,
+      });
+
+      // 3. Send invitation to the selected colleague
+      const { error: invErr } = await db.from('invitations').insert({
+        workspace_id: activeWs,
+        room_id: room.id,
+        receiver_id: quickInviteData.member.user_id,
+        status: 'pending',
+      });
+
+      if (invErr) throw invErr;
+
+      // 4. Push remote native notification if in app
+      try {
+        const tagName = FLAT_TAGS.find(t => t.code === quickInviteData.tagCode)?.name || 'gặp gỡ';
+        await mushyApi.push({
+          workspaceId: activeWs,
+          appSlug: 'buddy-connect',
+          userIds: [quickInviteData.member.user_id],
+          title: '⚡ Lập kèo nhanh!',
+          body: `${ctx.userFullName || 'Đồng nghiệp'} đã rủ bạn cùng tham gia hoạt động "${tagName}" lúc ${quickInviteLocation} vào lúc ${new Date(quickInviteTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}. Mở app để nhận lời ngay!`,
+        });
+      } catch (pushErr) {
+        console.warn('Lỗi push notification:', pushErr);
+      }
+
+      setQuickInviteData(null);
+      await dialog.success('Đã gửi lời mời!', `Lập kèo nhanh thành công! Lời mời tham gia "${quickInviteData.tagName}" đã được gửi tới ${quickInviteData.member.full_name}.`);
+      
+      // Reload lists
+      loadData();
+    } catch (e) {
+      dialog.error('Lỗi lập kèo nhanh', e.message);
+    } finally {
+      setSubmittingQuickInvite(false);
+    }
+  };
+
   // --- Smart Matching & Sorting Priority Logic (PRD Section 5) ---
   const rankedCandidates = useMemo(() => {
     if (!hasProfile) return [];
 
     const myProfileData = allProfiles[ctx.userId] || {};
     const myInterests = myTags || [];
+    const q = searchQuery.trim().toLowerCase();
 
     return members
       .map(member => {
         const profile = allProfiles[member.user_id] || {};
         const tags = allUserTags[member.user_id] || [];
+
+        // Apply search query filter if present
+        if (q) {
+          const nameMatch = member.full_name?.toLowerCase().includes(q);
+          const deptMatch = profile.department?.toLowerCase().includes(q);
+          const facMatch = profile.facility?.toLowerCase().includes(q);
+          
+          // Match tag names
+          const tagMatches = tags.some(code => {
+            const tagObj = FLAT_TAGS.find(t => t.code === code);
+            const tagName = tagObj?.name?.toLowerCase();
+            const parentName = tagObj?.parent_name?.toLowerCase();
+            return tagName?.includes(q) || parentName?.includes(q);
+          });
+
+          if (!nameMatch && !deptMatch && !facMatch && !tagMatches) {
+            return null;
+          }
+        }
 
         // Check exact child tag overlap
         const exactMatches = myInterests.filter(code => tags.includes(code));
@@ -637,7 +821,7 @@ export default function App() {
         // Secondarily sort by higher match score
         return b.matchScore - a.matchScore;
       });
-  }, [members, allProfiles, allUserTags, myTags, myProfile, interactionHistory, fallbackEnabled, hasProfile]);
+  }, [members, allProfiles, allUserTags, myTags, myProfile, interactionHistory, fallbackEnabled, hasProfile, searchQuery]);
 
   // --- Room Management Handlers ---
 
@@ -1572,29 +1756,62 @@ export default function App() {
                 </section>
               ) : (
                 <>
-                  <section className="mushy-card" style={{ marginBottom: 16 }}>
-                    <div className="radar-container">
-                      <div className="radar-backdrop">
-                        <span className="radar-avatar">👽</span>
-                      </div>
-                      <h3 className="mushy-section-title" style={{ margin: '8px 0 2px' }}>Connect Radar đang quét</h3>
-                      <p className="mushy-section-sub" style={{ margin: 0, textAlign: 'center' }}>
-                        So khớp sở thích chéo với các đồng nghiệp thuộc tổ chức <strong>{scope.label}</strong>
+                  <div className="compact-radar-header">
+                    <div className="radar-pulse-wrapper">
+                      <div className="radar-pulse-dot"></div>
+                      <div className="radar-pulse-ring"></div>
+                    </div>
+                    <div className="radar-text-wrapper">
+                      <h4 className="compact-radar-title">Connect Radar đang quét...</h4>
+                      <p className="compact-radar-sub">
+                        Khớp chéo sở thích trong tổ chức <strong>{scope.label}</strong>
                       </p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                    </div>
+                    <div className="compact-radar-action">
+                      <label className="fallback-toggle-label" title="Cho phép gợi ý bộ môn cùng nhóm khi thiếu người">
                         <input
                           type="checkbox"
-                          id="fallback-mode"
                           checked={fallbackEnabled}
                           onChange={(e) => setFallbackEnabled(e.target.checked)}
-                          style={{ accentColor: 'var(--brand)' }}
+                          className="fallback-checkbox-hidden"
                         />
-                        <label htmlFor="fallback-mode" style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>
-                          Cho phép gợi ý bộ môn cùng nhóm khi thiếu người
-                        </label>
-                      </div>
+                        <span className={`fallback-toggle-btn ${fallbackEnabled ? 'active' : ''}`}>
+                          {fallbackEnabled ? '💡 Gợi ý bật' : '💡 Gợi ý tắt'}
+                        </span>
+                      </label>
                     </div>
-                  </section>
+                  </div>
+
+                  {/* Search box for Radar */}
+                  <div className="search-box-container" style={{ marginBottom: 14 }}>
+                    <span className="search-icon">🔍</span>
+                    <input
+                      type="text"
+                      className="mushy-input search-input"
+                      placeholder="Tìm đồng nghiệp theo tên, phòng ban, sở thích..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      style={{ paddingLeft: 38 }}
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        style={{
+                          position: 'absolute',
+                          right: 12,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--muted)',
+                          cursor: 'pointer',
+                          fontSize: 16
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
 
                   {rankedCandidates.length === 0 ? (
                     <div className="mushy-empty-state animated-fade-in">
@@ -1604,78 +1821,77 @@ export default function App() {
                     </div>
                   ) : (
                     rankedCandidates.map(({ member, profile, tags, exactMatches, priority, isFallback, fallbackParentLabel, matchScore, hasInteracted }) => (
-                      <section key={member.user_id} className="mushy-card buddy-card">
-                        <div className="buddy-glow-effect" />
-                        <div className="buddy-card-header">
-                          <div className="buddy-avatar-wrapper">
+                      <section key={member.user_id} className="buddy-card-compact">
+                        <div className="buddy-card-main">
+                          <div className="buddy-avatar-compact">
                             <span>{member.full_name?.charAt(0)}</span>
                           </div>
-                          <div className="buddy-info">
-                            <h4 className="buddy-name">
-                              {member.full_name}
-                              <span style={{ fontSize: 10, fontWeight: 'normal', color: 'var(--muted)', background: 'rgba(15,15,18,0.05)', padding: '2px 6px', borderRadius: 4 }}>
-                                {profile.department || 'Phòng ban'}
-                              </span>
-                            </h4>
-                            <p className="buddy-status-text" style={{ fontSize: 11 }}>
-                              📍 {profile.facility || 'Cơ sở'} · ⏱️ {profile.available_times?.join(', ') || 'Chưa cập nhật giờ rảnh'}
+                          
+                          <div className="buddy-body-compact">
+                            <div className="buddy-header-row">
+                              <h4 className="buddy-name-compact">{member.full_name}</h4>
+                              <span className="buddy-match-badge">{matchScore}% Match</span>
+                            </div>
+                            
+                            <div className="buddy-meta-row">
+                              <span className="buddy-dept">{profile.department || 'Phòng ban'}</span>
+                              <span className="buddy-dot-separator">·</span>
+                              <span className="buddy-facility">{profile.facility || 'Cơ sở'}</span>
+                            </div>
+
+                            <p className="buddy-time-text">
+                              🕒 Rảnh: {profile.available_times?.join(', ') || 'Chưa cập nhật'}
                             </p>
+
+                            <div className="buddy-labels-row">
+                              {/* Show exactly one key badge */}
+                              {priority === 1 ? (
+                                <span className="buddy-status-pill priority-high">🔥 Khác phòng ban</span>
+                              ) : priority === 2 ? (
+                                <span className="buddy-status-pill priority-same">👥 Cùng phòng ban</span>
+                              ) : hasInteracted ? (
+                                <span className="buddy-status-pill priority-interacted">⇆ Đã tương tác</span>
+                              ) : isFallback ? (
+                                <span className="buddy-status-pill priority-fallback">💡 Gợi ý nhóm {fallbackParentLabel}</span>
+                              ) : null}
+
+                              {/* Clean matching tag chips */}
+                              {exactMatches.slice(0, 3).map(tag => (
+                                <span 
+                                  key={tag.code} 
+                                  className="buddy-tag-compact"
+                                  style={{ cursor: 'pointer' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    bridge.haptic('light');
+                                    setQuickInviteData({ member, tagCode: tag.code, tagName: tag.name });
+                                    setQuickInviteTime(quickTimeOptions[0]?.value || '');
+                                  }}
+                                  title={`Rủ nhanh ${member.full_name} cùng chơi ${tag.name}`}
+                                >
+                                  ❤️ {tag.name}
+                                </span>
+                              ))}
+                            </div>
                           </div>
-                          <div
-                            className="match-score-badge"
-                            style={{
-                              background: priority === 1 ? 'var(--gradient-match)' : priority === 2 ? 'var(--gradient-purple)' : 'var(--gradient-cyan)',
-                            }}
-                          >
-                            <div>{matchScore}%</div>
-                            <div style={{ fontSize: 8, opacity: 0.8, fontWeight: 'normal' }}>Match</div>
-                          </div>
                         </div>
 
-                        {/* Priority Badge Indicator */}
-                        <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
-                          {priority === 1 && <span style={{ fontSize: 10, background: 'rgba(230,57,70,0.1)', color: 'var(--brand)', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>🔥 Ưu tiên cao (Khác phòng ban)</span>}
-                          {priority === 2 && <span style={{ fontSize: 10, background: 'rgba(168,85,247,0.1)', color: '#A855F7', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>👥 Cùng phòng ban</span>}
-                          {hasInteracted && <span style={{ fontSize: 10, background: 'rgba(16,185,129,0.1)', color: '#10B981', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>⇆ Đã từng tương tác</span>}
-                          {isFallback && <span style={{ fontSize: 10, background: 'rgba(245,158,11,0.1)', color: '#D97706', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>💡 Gợi ý tương tự cùng nhóm [{fallbackParentLabel}]</span>}
-                        </div>
-
-                        {/* Tags list */}
-                        <div className="buddy-tags-grid">
-                          {exactMatches.map(tag => (
-                            <span key={tag.code} className="buddy-tag buddy-tag--shared">
-                              ❤️ {tag.name}
-                            </span>
-                          ))}
-                          {tags.filter(code => !exactMatches.some(em => em.code === code)).slice(0, 4).map(code => (
-                            <span key={code} className="buddy-tag">
-                              {getTagName(code)}
-                            </span>
-                          ))}
-                        </div>
-
-                        {/* Actions */}
-                        <div className="buddy-actions">
+                        <div className="buddy-actions-compact">
                           <button
-                            className="mushy-btn mushy-btn--primary"
+                            className="mushy-btn mushy-btn--primary compact-btn"
                             onClick={() => {
                               bridge.haptic('light');
-                              setNewRoom(prev => ({
-                                ...prev,
-                                child_code: exactMatches[0]?.code || tags[0] || 'badminton',
-                              }));
-                              setInvitedGuests([member.user_id]);
-                              setShowCreateRoom(true);
-                              setActiveTab('rooms');
+                              const primaryTag = exactMatches[0] || FLAT_TAGS.find(t => t.code === tags[0]) || { code: 'badminton', name: 'Cầu lông 🏸' };
+                              setQuickInviteData({ member, tagCode: primaryTag.code || primaryTag.value, tagName: primaryTag.name || primaryTag.label });
+                              setQuickInviteTime(quickTimeOptions[0]?.value || '');
                             }}
                           >
-                            🏸 Rủ lập kèo Connect
+                            ⚡ Rủ nhanh
                           </button>
-
+                          
                           {member.work_phone ? (
                             <button
-                              className="mushy-btn mushy-btn--ghost"
-                              style={{ padding: '10px 14px' }}
+                              className="mushy-btn mushy-btn--ghost compact-btn-phone"
                               onClick={() => {
                                 bridge.haptic('light');
                                 bridge.tel(member.work_phone);
@@ -1685,8 +1901,7 @@ export default function App() {
                             </button>
                           ) : (
                             <button
-                              className="mushy-btn mushy-btn--ghost"
-                              style={{ padding: '10px 14px', opacity: 0.4 }}
+                              className="mushy-btn mushy-btn--ghost compact-btn-phone disabled-phone"
                               onClick={() => {
                                 dialog.info('Thông tin liên hệ', `${member.full_name} chưa cập nhật số điện thoại native.`);
                               }}
@@ -2423,6 +2638,94 @@ export default function App() {
           )}
 
         </>
+      )}
+
+      {/* QUICK INVITE MODAL */}
+      {quickInviteData && (
+        <div className="modal-scrim dialog-scrim animated-fade-in" onClick={() => setQuickInviteData(null)}>
+          <div className="modal-card" style={{ maxWidth: 420, textAlign: 'left', display: 'flex', flexDirection: 'column', maxHeight: '95dvh' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, borderBottom: '1px solid var(--hairline)', paddingBottom: 8 }}>
+              <h3 className="dialog-title" style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                <span>⚡</span> Lập kèo nhanh
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setQuickInviteData(null)}
+                style={{ border: 'none', background: 'transparent', fontSize: 22, cursor: 'pointer', color: 'var(--muted)', padding: '0 4px', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: 'rgba(230,57,70,0.03)', padding: 12, borderRadius: 12, border: '1px solid rgba(230,57,70,0.08)', marginBottom: 16 }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 'bold', color: 'var(--brand)' }}>
+                  {quickInviteData.member.full_name?.charAt(0)}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)' }}>Rủ {quickInviteData.member.full_name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>Cùng tham gia hoạt động: <strong>{quickInviteData.tagName}</strong></div>
+                </div>
+              </div>
+
+              {/* Time selection grid */}
+              <div style={{ marginBottom: 14 }}>
+                <label className="mushy-label" style={{ fontSize: 11.5 }}>Chọn thời gian rảnh nhanh (Khớp giờ rảnh)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
+                  {quickTimeOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`selectable-chip ${quickInviteTime === opt.value ? 'selectable-chip--selected' : ''}`}
+                      style={{ padding: '6px 12px', fontSize: 11.5, textAlign: 'center', margin: 0 }}
+                      onClick={() => { bridge.haptic('light'); setQuickInviteTime(opt.value); }}
+                    >
+                      {opt.icon} {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Location selection grid */}
+              <div style={{ marginBottom: 14 }}>
+                <label className="mushy-label" style={{ fontSize: 11.5 }}>Địa điểm gặp mặt</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {['Căn tin công ty 🍲', 'Sân thể thao gần cty 🏸', 'Quán cafe tầng G ☕', 'Khu vực Pantry 🥤'].map(loc => (
+                    <button
+                      key={loc}
+                      type="button"
+                      className={`selectable-chip ${quickInviteLocation === loc ? 'selectable-chip--selected' : ''}`}
+                      style={{ padding: '6px 12px', fontSize: 11.5, margin: 0 }}
+                      onClick={() => { bridge.haptic('light'); setQuickInviteLocation(loc); }}
+                    >
+                      {loc}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="form-actions" style={{ borderTop: '1px solid var(--hairline)', paddingTop: 10, marginTop: 10, paddingBottom: 0 }}>
+              <button 
+                type="button" 
+                className="mushy-btn mushy-btn--ghost" 
+                style={{ height: 34, fontSize: 12.5 }}
+                onClick={() => setQuickInviteData(null)}
+              >
+                Hủy
+              </button>
+              <button 
+                type="button" 
+                className="mushy-btn mushy-btn--primary btn-glow-brand" 
+                style={{ height: 34, fontSize: 12.5 }}
+                disabled={submittingQuickInvite || !quickInviteTime}
+                onClick={handleQuickInviteSubmit}
+              >
+                {submittingQuickInvite ? 'Đang gửi...' : 'Gửi lời mời nhanh 🚀'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* PROFILE CONFIGURATION MODAL */}

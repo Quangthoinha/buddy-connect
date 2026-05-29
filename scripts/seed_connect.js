@@ -385,6 +385,29 @@ try {
     }
   }
 
+  // 3. Seed interaction history (acquaintances) for the first 2 other members
+  const otherMembers = wsMembers.filter(m => m.user_id !== UID);
+  if (otherMembers.length > 0) {
+    // Wipe old history for this workspace to avoid PK constraint issues
+    await sb.from('interaction_history').delete().eq('workspace_id', WS);
+
+    const historyToInsert = otherMembers.slice(0, 2).map(m => {
+      const [u1, u2] = [UID, m.user_id].sort();
+      return {
+        workspace_id: WS,
+        user_id_1: u1,
+        user_id_2: u2
+      };
+    });
+
+    const { error: histErr } = await sb.from('interaction_history').insert(historyToInsert);
+    if (histErr) {
+      console.warn('⚠️ Lỗi chèn lịch sử tương tác:', histErr.message);
+    } else {
+      console.log(`✓ Đã tạo thành công lịch sử tương tác (người quen) cho 2 thành viên.`);
+    }
+  }
+
   console.log(`✓ Đã tạo/đồng bộ hồ sơ user_profiles cho ${profilesInserted} thành viên.`);
   console.log(`✓ Đã gán thành công ${tagsLinked} liên kết sở thích vào user_tags để test matching.`);
   console.log('🎉 Toàn bộ quy trình seeding đã hoàn tất mỹ mãn!');

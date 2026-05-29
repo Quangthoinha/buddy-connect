@@ -19,9 +19,16 @@ create index if not exists idx_tags_workspace on app_buddy_connect.tags (workspa
 grant select, insert, update, delete on app_buddy_connect.tags to authenticated;
 alter table app_buddy_connect.tags enable row level security;
 
+drop policy if exists "tags_select" on app_buddy_connect.tags;
 create policy "tags_select" on app_buddy_connect.tags for select using (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "tags_insert" on app_buddy_connect.tags;
 create policy "tags_insert" on app_buddy_connect.tags for insert with check (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "tags_update" on app_buddy_connect.tags;
 create policy "tags_update" on app_buddy_connect.tags for update using (public.can_access_app_data(workspace_id, 'buddy-connect')) with check (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "tags_delete" on app_buddy_connect.tags;
 create policy "tags_delete" on app_buddy_connect.tags for delete using (public.is_owner_workspace_member(workspace_id));
 
 
@@ -41,9 +48,16 @@ create index if not exists idx_profiles_workspace on app_buddy_connect.user_prof
 grant select, insert, update, delete on app_buddy_connect.user_profiles to authenticated;
 alter table app_buddy_connect.user_profiles enable row level security;
 
+drop policy if exists "profiles_select" on app_buddy_connect.user_profiles;
 create policy "profiles_select" on app_buddy_connect.user_profiles for select using (public.can_access_app_data(workspace_id, 'buddy-connect'));
-create policy "profiles_insert" on app_buddy_connect.user_profiles for insert with check (auth.uid() = user_id and public.can_access_app_data(workspace_id, 'buddy-connect'));
-create policy "profiles_update" on app_buddy_connect.user_profiles for update using (auth.uid() = user_id and public.can_access_app_data(workspace_id, 'buddy-connect')) with check (auth.uid() = user_id and public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "profiles_insert" on app_buddy_connect.user_profiles;
+create policy "profiles_insert" on app_buddy_connect.user_profiles for insert with check ((auth.uid() = user_id or public.is_owner_workspace_member(workspace_id)) and public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "profiles_update" on app_buddy_connect.user_profiles;
+create policy "profiles_update" on app_buddy_connect.user_profiles for update using ((auth.uid() = user_id or public.is_owner_workspace_member(workspace_id)) and public.can_access_app_data(workspace_id, 'buddy-connect')) with check ((auth.uid() = user_id or public.is_owner_workspace_member(workspace_id)) and public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "profiles_delete" on app_buddy_connect.user_profiles;
 create policy "profiles_delete" on app_buddy_connect.user_profiles for delete using (public.is_owner_workspace_member(workspace_id));
 
 
@@ -61,8 +75,13 @@ create index if not exists idx_user_tags_lookup on app_buddy_connect.user_tags (
 grant select, insert, update, delete on app_buddy_connect.user_tags to authenticated;
 alter table app_buddy_connect.user_tags enable row level security;
 
+drop policy if exists "user_tags_select" on app_buddy_connect.user_tags;
 create policy "user_tags_select" on app_buddy_connect.user_tags for select using (public.can_access_app_data(workspace_id, 'buddy-connect'));
-create policy "user_tags_insert" on app_buddy_connect.user_tags for insert with check (auth.uid() = user_id and public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "user_tags_insert" on app_buddy_connect.user_tags;
+create policy "user_tags_insert" on app_buddy_connect.user_tags for insert with check ((auth.uid() = user_id or public.is_owner_workspace_member(workspace_id)) and public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "user_tags_delete" on app_buddy_connect.user_tags;
 create policy "user_tags_delete" on app_buddy_connect.user_tags for delete using (auth.uid() = user_id or public.is_owner_workspace_member(workspace_id));
 
 
@@ -89,9 +108,16 @@ create index if not exists idx_rooms_scheduled on app_buddy_connect.rooms (works
 grant select, insert, update, delete on app_buddy_connect.rooms to authenticated;
 alter table app_buddy_connect.rooms enable row level security;
 
+drop policy if exists "rooms_select" on app_buddy_connect.rooms;
 create policy "rooms_select" on app_buddy_connect.rooms for select using (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "rooms_insert" on app_buddy_connect.rooms;
 create policy "rooms_insert" on app_buddy_connect.rooms for insert with check (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "rooms_update" on app_buddy_connect.rooms;
 create policy "rooms_update" on app_buddy_connect.rooms for update using (public.can_access_app_data(workspace_id, 'buddy-connect')) with check (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "rooms_delete" on app_buddy_connect.rooms;
 create policy "rooms_delete" on app_buddy_connect.rooms for delete using (public.is_owner_workspace_member(workspace_id));
 
 
@@ -112,9 +138,16 @@ create index if not exists idx_invitations_room on app_buddy_connect.invitations
 grant select, insert, update, delete on app_buddy_connect.invitations to authenticated;
 alter table app_buddy_connect.invitations enable row level security;
 
+drop policy if exists "invitations_select" on app_buddy_connect.invitations;
 create policy "invitations_select" on app_buddy_connect.invitations for select using (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "invitations_insert" on app_buddy_connect.invitations;
 create policy "invitations_insert" on app_buddy_connect.invitations for insert with check (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "invitations_update" on app_buddy_connect.invitations;
 create policy "invitations_update" on app_buddy_connect.invitations for update using (public.can_access_app_data(workspace_id, 'buddy-connect')) with check (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "invitations_delete" on app_buddy_connect.invitations;
 create policy "invitations_delete" on app_buddy_connect.invitations for delete using (public.is_owner_workspace_member(workspace_id));
 
 
@@ -132,8 +165,13 @@ create index if not exists idx_history_lookup on app_buddy_connect.interaction_h
 grant select, insert, update, delete on app_buddy_connect.interaction_history to authenticated;
 alter table app_buddy_connect.interaction_history enable row level security;
 
+drop policy if exists "history_select" on app_buddy_connect.interaction_history;
 create policy "history_select" on app_buddy_connect.interaction_history for select using (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "history_insert" on app_buddy_connect.interaction_history;
 create policy "history_insert" on app_buddy_connect.interaction_history for insert with check (public.can_access_app_data(workspace_id, 'buddy-connect'));
+
+drop policy if exists "history_delete" on app_buddy_connect.interaction_history;
 create policy "history_delete" on app_buddy_connect.interaction_history for delete using (public.is_owner_workspace_member(workspace_id));
 
 
