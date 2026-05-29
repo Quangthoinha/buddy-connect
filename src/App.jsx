@@ -382,6 +382,41 @@ export default function App() {
       // Run lazy daemon to clean up expired rooms
       await runLazyExpiryDaemon(activeWs);
 
+      // Auto-initialize database tags taxonomy if missing for this workspace
+      // (Required for production/staging workspaces that haven't been manually seeded!)
+      try {
+        const { data: existingTags, error: checkTagsErr } = await db
+          .from('tags')
+          .select('child_code')
+          .eq('workspace_id', activeWs)
+          .limit(1);
+
+        if (!checkTagsErr && (!existingTags || existingTags.length === 0)) {
+          console.log('⚡ Taxonomy empty for workspace. Auto-seeding 200 tags...');
+          const tagsToInsert = [];
+          TAXONOMY.forEach(parent => {
+            parent.children.forEach(child => {
+              tagsToInsert.push({
+                workspace_id: activeWs,
+                parent_code: parent.parent_code,
+                parent_name: parent.parent_name,
+                child_code: child.code,
+                name: child.name
+              });
+            });
+          });
+          
+          const { error: seedErr } = await db.from('tags').insert(tagsToInsert);
+          if (seedErr) {
+            console.error('Lỗi tự động seed tags:', seedErr);
+          } else {
+            console.log('✓ Tự động seed 200 tags thành công cho workspace!');
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Lỗi kiểm tra/seeding tags:', checkErr);
+      }
+
       // 1. Fetch current user profile
       const { data: prof, error: profErr } = await db
         .from('user_profiles')
