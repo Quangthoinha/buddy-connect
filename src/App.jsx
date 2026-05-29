@@ -385,14 +385,13 @@ export default function App() {
       // Auto-initialize database tags taxonomy if missing for this workspace
       // (Required for production/staging workspaces that haven't been manually seeded!)
       try {
-        const { data: existingTags, error: checkTagsErr } = await db
+        const { error: checkTagsErr, count } = await db
           .from('tags')
-          .select('child_code')
-          .eq('workspace_id', activeWs)
-          .limit(1);
+          .select('child_code', { count: 'exact', head: true })
+          .eq('workspace_id', activeWs);
 
-        if (!checkTagsErr && (!existingTags || existingTags.length === 0)) {
-          console.log('⚡ Taxonomy empty for workspace. Auto-seeding 200 tags...');
+        if (!checkTagsErr && (count === null || count < 200)) {
+          console.log('⚡ Taxonomy missing or incomplete. Auto-seeding/upserting 200 tags...');
           const tagsToInsert = [];
           TAXONOMY.forEach(parent => {
             parent.children.forEach(child => {
@@ -406,7 +405,7 @@ export default function App() {
             });
           });
           
-          const { error: seedErr } = await db.from('tags').insert(tagsToInsert);
+          const { error: seedErr } = await db.from('tags').upsert(tagsToInsert, { onConflict: 'workspace_id,child_code' });
           if (seedErr) {
             console.error('Lỗi tự động seed tags:', seedErr);
           } else {
@@ -695,6 +694,33 @@ export default function App() {
     try {
       bridge.haptic('medium');
       const activeWs = scope.workspaceId;
+
+      // Auto-initialize or fix tags taxonomy in database right before saving to prevent foreign key errors
+      try {
+        const { error: checkTagsErr, count } = await db
+          .from('tags')
+          .select('child_code', { count: 'exact', head: true })
+          .eq('workspace_id', activeWs);
+
+        if (!checkTagsErr && (count === null || count < 200)) {
+          console.log('⚡ Saving profile: tags incomplete. Auto-upserting 200 tags...');
+          const tagsToInsert = [];
+          TAXONOMY.forEach(parent => {
+            parent.children.forEach(child => {
+              tagsToInsert.push({
+                workspace_id: activeWs,
+                parent_code: parent.parent_code,
+                parent_name: parent.parent_name,
+                child_code: child.code,
+                name: child.name
+              });
+            });
+          });
+          await db.from('tags').upsert(tagsToInsert, { onConflict: 'workspace_id,child_code' });
+        }
+      } catch (checkErr) {
+        console.warn('Lỗi kiểm tra tags khi lưu:', checkErr);
+      }
 
       // 1. Upsert profile
       const { error: profErr } = await db.from('user_profiles').upsert({
