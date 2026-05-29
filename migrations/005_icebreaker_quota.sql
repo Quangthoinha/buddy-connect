@@ -1,42 +1,44 @@
 -- Migration 005: Thêm quota cho icebreaker API
-CREATE TABLE IF NOT EXISTS app_buddy_connect.icebreaker_quotas (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  workspace_id UUID NOT NULL,
-  used_count INT DEFAULT 0,
-  max_count INT DEFAULT 10,
-  last_reset TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE (user_id, workspace_id)
+
+-- @realtime
+create table if not exists app_buddy_connect.icebreaker_quotas (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  workspace_id uuid not null,
+  used_count int default 0,
+  max_count int default 10,
+  last_reset timestamptz default now(),
+  unique (user_id, workspace_id)
 );
 
 -- Index bắt buộc trên cột workspace_id để tối ưu hóa truy vấn cô lập dữ liệu
-CREATE INDEX IF NOT EXISTS idx_icebreaker_quotas_workspace ON app_buddy_connect.icebreaker_quotas (workspace_id);
+create index if not exists idx_icebreaker_quotas_workspace on app_buddy_connect.icebreaker_quotas (workspace_id);
 
 -- Grant privileges
-GRANT SELECT, INSERT, UPDATE, DELETE ON app_buddy_connect.icebreaker_quotas TO authenticated;
+grant select, insert, update, delete on app_buddy_connect.icebreaker_quotas to authenticated;
 
 -- Enable RLS
-ALTER TABLE app_buddy_connect.icebreaker_quotas ENABLE ROW LEVEL SECURITY;
+alter table app_buddy_connect.icebreaker_quotas enable row level security;
 
 -- Setup Workspace Isolation policies
-DROP POLICY IF EXISTS "quotas_select" ON app_buddy_connect.icebreaker_quotas;
-CREATE POLICY "quotas_select" ON app_buddy_connect.icebreaker_quotas FOR SELECT USING (
+drop policy if exists "quotas_select" on app_buddy_connect.icebreaker_quotas;
+create policy "quotas_select" on app_buddy_connect.icebreaker_quotas for select using (
   public.can_access_app_data(workspace_id, 'buddy-connect')
 );
 
-DROP POLICY IF EXISTS "quotas_insert" ON app_buddy_connect.icebreaker_quotas;
-CREATE POLICY "quotas_insert" ON app_buddy_connect.icebreaker_quotas FOR INSERT WITH CHECK (
+drop policy if exists "quotas_insert" on app_buddy_connect.icebreaker_quotas;
+create policy "quotas_insert" on app_buddy_connect.icebreaker_quotas for insert with check (
   public.can_access_app_data(workspace_id, 'buddy-connect')
 );
 
-DROP POLICY IF EXISTS "quotas_update" ON app_buddy_connect.icebreaker_quotas;
-CREATE POLICY "quotas_update" ON app_buddy_connect.icebreaker_quotas FOR UPDATE USING (
+drop policy if exists "quotas_update" on app_buddy_connect.icebreaker_quotas;
+create policy "quotas_update" on app_buddy_connect.icebreaker_quotas for update using (
   public.can_access_app_data(workspace_id, 'buddy-connect')
-) WITH CHECK (
+) with check (
   public.can_access_app_data(workspace_id, 'buddy-connect')
 );
 
-DROP POLICY IF EXISTS "quotas_delete" ON app_buddy_connect.icebreaker_quotas;
-CREATE POLICY "quotas_delete" ON app_buddy_connect.icebreaker_quotas FOR DELETE USING (
-  public.is_owner_workspace_member(workspace_id)
+drop policy if exists "quotas_delete" on app_buddy_connect.icebreaker_quotas;
+create policy "quotas_delete" on app_buddy_connect.icebreaker_quotas for delete using (
+  public.can_access_app_data(workspace_id, 'buddy-connect')
 );
