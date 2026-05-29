@@ -310,6 +310,7 @@ export default function App() {
   // UI Interactivity states
   const [expandedParents, setExpandedParents] = useState({}); // parent_code -> boolean
   const [searchQuery, setSearchQuery] = useState('');
+  const [inviteSearchQuery, setInviteSearchQuery] = useState('');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
 
   // Room Co-creation Form State
@@ -507,7 +508,53 @@ export default function App() {
       .select('*')
       .eq('workspace_id', activeWs)
       .order('scheduled_at', { ascending: true });
-    setRooms(rms || []);
+
+    // Generate 3 static mock rooms hosted by our mock colleagues
+    const mockRooms = [
+      {
+        id: 'mock-room-inv-100',
+        workspace_id: activeWs,
+        host_id: 'mock-user-uuid-1001',
+        child_code: 'badminton',
+        location: 'Sân cầu lông Kỳ Hòa (Sân số 3)',
+        scheduled_at: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+        max_participants: 2,
+        status: 'open',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: 'mock-room-inv-101',
+        workspace_id: activeWs,
+        host_id: 'mock-user-uuid-1002',
+        child_code: 'cafe',
+        location: 'Quán Highlands Coffee đối diện công ty',
+        scheduled_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        max_participants: 2,
+        status: 'open',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: 'mock-room-inv-102',
+        workspace_id: activeWs,
+        host_id: 'mock-user-uuid-1003',
+        child_code: 'movie',
+        location: 'CGV Pearl Plaza (Rạp số 2)',
+        scheduled_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+        max_participants: 2,
+        status: 'open',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    ];
+
+    setRooms(prev => {
+      const dbRms = rms || [];
+      const currentMockRms = prev.filter(r => r.id.startsWith('mock-'));
+      const finalMocks = currentMockRms.length > 0 ? currentMockRms : mockRooms;
+      return [...finalMocks, ...dbRms];
+    });
   }
 
   async function loadInvitationsData() {
@@ -518,7 +565,43 @@ export default function App() {
       .from('invitations')
       .select('*')
       .eq('workspace_id', activeWs);
-    setInvitations(invs || []);
+
+    const mockInvs = [
+      {
+        id: 'mock-inv-100',
+        workspace_id: activeWs,
+        room_id: 'mock-room-inv-100',
+        receiver_id: ctx.userId,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: 'mock-inv-101',
+        workspace_id: activeWs,
+        room_id: 'mock-room-inv-101',
+        receiver_id: ctx.userId,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: 'mock-inv-102',
+        workspace_id: activeWs,
+        room_id: 'mock-room-inv-102',
+        receiver_id: ctx.userId,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    ];
+
+    setInvitations(prev => {
+      const dbInvs = invs || [];
+      const currentMockInvs = prev.filter(i => i.id.startsWith('mock-'));
+      const finalMocks = currentMockInvs.length > 0 ? currentMockInvs : mockInvs;
+      return [...finalMocks, ...dbInvs];
+    });
   }
 
   // 8.1 Expiry Daemon: Client-side lazy sweep
@@ -1126,6 +1209,23 @@ export default function App() {
     try {
       bridge.haptic('light');
       const activeWs = scope.workspaceId;
+      
+      // INTERCEPT MOCK INVITATION
+      if (inv.id.startsWith('mock-')) {
+        // Set invitation to accepted
+        setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'accepted' } : i));
+        
+        // Find and update the mock room status to matched
+        setRooms(prev => prev.map(r => r.id === inv.room_id ? { 
+          ...r, 
+          status: 'matched', 
+          chat_group_id: 'mock-chat-group-123' 
+        } : r));
+        
+        dialog.success('Đã ghép cặp thành công!', 'Chúc mừng! Bạn đã chấp nhận lời mời và ghép cặp thành công. Nhóm chat đã sẵn sàng!');
+        return;
+      }
+
       const room = rooms.find(r => r.id === inv.room_id);
       if (!room) return;
 
@@ -1359,6 +1459,14 @@ export default function App() {
   const handleDeclineInvitation = async (inv) => {
     try {
       bridge.haptic('light');
+      
+      // INTERCEPT MOCK INVITATION
+      if (inv.id.startsWith('mock-')) {
+        setInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'declined' } : i));
+        dialog.success('Đã từ chối', 'Bạn đã từ chối lời mời này thành công.');
+        return;
+      }
+
       await db
         .from('invitations')
         .update({ status: 'declined', updated_at: new Date().toISOString() })
@@ -1381,6 +1489,8 @@ export default function App() {
       dialog.error('Lỗi từ chối', e.message);
     }
   };
+
+
 
   const handleInviteAdditionalGuest = async (roomId, guestId) => {
     try {
@@ -1668,6 +1778,57 @@ export default function App() {
     const tag = FLAT_TAGS.find(t => t.code === code);
     return tag ? tag.name : code;
   };
+
+  if (ctx.isMissingContext) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #FFF0F2 0%, #FFE5E9 100%)',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        padding: '24px',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(16px)',
+          border: '1.5px solid rgba(255, 77, 109, 0.15)',
+          borderRadius: '24px',
+          padding: '40px 30px',
+          maxWidth: '420px',
+          boxShadow: '0 15px 35px rgba(255, 77, 109, 0.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
+        }}>
+          <span style={{ fontSize: '56px', marginBottom: '20px', filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.06))' }}>📱</span>
+          <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#1E293B', margin: '0 0 12px', letterSpacing: '-0.3px' }}>
+            Mở trong Mushy Super App
+          </h2>
+          <p style={{ fontSize: '13.5px', color: '#64748B', lineHeight: '1.6', margin: '0 0 28px' }}>
+            Bạn đang truy cập bản build trực tiếp trên Vercel. Để trải nghiệm và kiểm thử đầy đủ các tính năng kết nối, <strong>vui lòng mở ứng dụng này bằng ứng ứng di động Mushy của bạn</strong>.
+          </p>
+          <div style={{
+            fontSize: '12px',
+            color: '#FF4D6D',
+            background: 'rgba(255, 77, 109, 0.06)',
+            border: '1px solid rgba(255, 77, 109, 0.12)',
+            borderRadius: '12px',
+            padding: '12px 18px',
+            fontWeight: '600',
+            width: '100%',
+            boxSizing: 'border-box',
+            lineHeight: '1.4'
+          }}>
+            ℹ️ Yêu cầu môi trường Mushy Super App Shell
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mushy-page">
@@ -2432,11 +2593,25 @@ export default function App() {
                             });
 
                             const allCandidates = [...matching, ...others];
+                            const q = inviteSearchQuery.trim().toLowerCase();
+                            const filteredCandidates = allCandidates.filter(c => {
+                              const dept = allProfiles[c.member.user_id]?.department || '';
+                              return !q || c.member.full_name.toLowerCase().includes(q) || dept.toLowerCase().includes(q);
+                            });
+
+                            // Smart limit displayed list to prevent overwhelm
+                            const displayedCandidates = [];
+                            if (q) {
+                              displayedCandidates.push(...filteredCandidates.slice(0, 30));
+                            } else {
+                              displayedCandidates.push(...matching);
+                              displayedCandidates.push(...others.slice(0, 10));
+                            }
 
                             return (
                               <div style={{ marginTop: 8 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
-                                  <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', margin: 0 }}>Mời thêm ứng viên mới:</label>
+                                  <label style={{ fontSize: 11.5, color: 'var(--muted)', display: 'block', margin: 0, fontWeight: 600 }}>Mời thêm ứng viên mới:</label>
                                   <div style={{ display: 'flex', gap: 6 }}>
                                     {matching.length > 0 && (
                                       <button
@@ -2474,30 +2649,142 @@ export default function App() {
                                   </div>
                                 </div>
 
-                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                  {allCandidates.length === 0 ? (
-                                    <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--muted)' }}>Không còn thành viên nào khả dụng để mời.</span>
-                                  ) : (
-                                    allCandidates.map(({ member: m, isMatch }) => (
-                                      <button
-                                        key={m.user_id}
-                                        className={`mushy-btn ${isMatch ? 'badge-tag-match' : 'mushy-btn--ghost'}`}
-                                        disabled={isQuotaExceeded}
-                                        style={{
-                                          padding: '4px 8px',
-                                          minHeight: 30,
-                                          fontSize: 11,
-                                          borderColor: isMatch ? 'var(--brand)' : undefined,
-                                          fontWeight: isMatch ? 700 : undefined
-                                        }}
-                                        onClick={() => handleInviteAdditionalGuest(room.id, m.user_id)}
-                                        title={isMatch ? `Đồng nghiệp trùng sở thích: ${getTagName(room.child_code)}` : undefined}
-                                      >
-                                        {isMatch ? '🔥 ' : '+ '} {m.full_name}
-                                      </button>
-                                    ))
+                                {/* Small search input for invitation panel */}
+                                <div style={{ position: 'relative', marginBottom: 8 }}>
+                                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--muted)', pointerEvents: 'none' }}>🔍</span>
+                                  <input
+                                    type="text"
+                                    className="mushy-input"
+                                    placeholder="Tìm nhanh tên đồng nghiệp muốn mời..."
+                                    value={inviteSearchQuery}
+                                    onChange={(e) => setInviteSearchQuery(e.target.value)}
+                                    style={{ paddingLeft: 26, height: 28, fontSize: 11.5, borderRadius: 8, margin: 0 }}
+                                  />
+                                  {inviteSearchQuery && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setInviteSearchQuery('')}
+                                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+                                    >
+                                      ✕
+                                    </button>
                                   )}
                                 </div>
+
+                                {/* Scrollable box for invite candidate list (Vertical rows) */}
+                                <div 
+                                  className="guest-selector-scroll" 
+                                  style={{ 
+                                    maxHeight: 220, 
+                                    overflowY: 'auto',
+                                    display: 'flex', 
+                                    flexDirection: 'column',
+                                    gap: 6, 
+                                    background: 'rgba(15, 15, 18, 0.01)',
+                                    padding: '8px',
+                                    border: '1px solid var(--hairline)',
+                                    borderRadius: '12px'
+                                  }}
+                                >
+                                  {displayedCandidates.length === 0 ? (
+                                    <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--muted)', padding: '4px', textAlign: 'center' }}>Không còn thành viên khả dụng hoặc khớp tìm kiếm.</span>
+                                  ) : (
+                                    <>
+                                      {displayedCandidates.map(({ member: m, isMatch }) => {
+                                        const profile = allProfiles[m.user_id] || {};
+                                        return (
+                                          <div
+                                            key={m.user_id}
+                                            style={{
+                                              display: 'flex',
+                                              justifyContent: 'space-between',
+                                              alignItems: 'center',
+                                              padding: '6px 10px',
+                                              background: isMatch ? 'rgba(230, 57, 70, 0.04)' : '#fff',
+                                              border: isMatch ? '1.5px solid rgba(230, 57, 70, 0.2)' : '1px solid var(--hairline)',
+                                              borderRadius: '10px',
+                                              transition: 'all 150ms ease'
+                                            }}
+                                          >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                                              {/* Tiny Initials Avatar */}
+                                              <div style={{
+                                                width: 28,
+                                                height: 28,
+                                                borderRadius: '50%',
+                                                background: isMatch ? 'linear-gradient(135deg, #FF7E5F 0%, #FEB47B 100%)' : 'linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%)',
+                                                color: isMatch ? '#fff' : '#64748B',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontSize: 11,
+                                                fontWeight: 'bold',
+                                                flexShrink: 0
+                                              }}>
+                                                {m.full_name?.charAt(0)}
+                                              </div>
+                                              <div style={{ minWidth: 0, flex: 1 }}>
+                                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.full_name}</span>
+                                                  {isMatch && (
+                                                    <span style={{
+                                                      fontSize: 8.5,
+                                                      padding: '1px 4px',
+                                                      background: 'var(--brand-soft)',
+                                                      color: 'var(--brand)',
+                                                      borderRadius: 4,
+                                                      fontWeight: 'bold',
+                                                      flexShrink: 0
+                                                    }}>
+                                                      🔥 Trùng tag
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <div style={{ fontSize: 10, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                  {profile.department || 'Đồng nghiệp'}
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="mushy-btn"
+                                              disabled={isQuotaExceeded}
+                                              onClick={() => handleInviteAdditionalGuest(room.id, m.user_id)}
+                                              style={{
+                                                minHeight: 26,
+                                                fontSize: 10.5,
+                                                padding: '2px 10px',
+                                                background: isMatch ? 'var(--brand)' : 'transparent',
+                                                borderColor: 'var(--brand)',
+                                                color: isMatch ? '#fff' : 'var(--brand)',
+                                                borderRadius: 6,
+                                                fontWeight: 600,
+                                                flexShrink: 0,
+                                                margin: 0
+                                              }}
+                                            >
+                                              Mời
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                      
+                                      {!q && allCandidates.length > displayedCandidates.length && (
+                                        <div style={{ 
+                                          fontSize: 10, 
+                                          color: 'var(--muted)', 
+                                          textAlign: 'center', 
+                                          padding: '4px 0', 
+                                          borderTop: '1px dashed var(--hairline)',
+                                          marginTop: 4
+                                        }}>
+                                          💡 Gợi ý {displayedCandidates.length}/{allCandidates.length} đồng nghiệp. Nhập ô tìm kiếm để lọc thêm...
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+
                                 {isQuotaExceeded && (
                                   <p style={{ fontSize: 10, color: 'var(--danger)', margin: '4px 0 0' }}>
                                     ⚠️ Đã đạt giới hạn pending ({pendingCount}). Vui lòng thu hồi bớt các lời mời cũ bên dưới để có thể mời tiếp.

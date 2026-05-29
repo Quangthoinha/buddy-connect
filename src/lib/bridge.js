@@ -210,6 +210,21 @@ async function mock(type, payload) {
     case 'ADD_CALENDAR_EVENT':
       console.log('[mock add-calendar-event]', payload?.title);
       return { action: 'saved', saved: true };
+    case 'CREATE_CHAT_GROUP':
+      console.log('[mock create-chat-group]', payload);
+      return { chatGroupId: `mock-chat-${Math.random().toString(36).substring(2, 9)}` };
+    case 'OPEN_CHAT_GROUP':
+      console.log('[mock open-chat-group]', payload);
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert(`[JS Bridge Mock] 💬 Đã kích hoạt Native Bridge OPEN_CHAT_GROUP!\n\nID nhóm chat: "${payload.chatGroupId}"\n\n(Trong môi trường Shell thật trên điện thoại, lệnh này sẽ mở màn hình chat native của nhóm hẹn này)`);
+      }
+      return { opened: true };
+    case 'SEND_CHAT_MESSAGE':
+      console.log('[mock send-chat-message]', payload);
+      return { sent: true };
+    case 'LOCK_CHAT_GROUP_READONLY':
+      console.log('[mock lock-chat-group]', payload);
+      return { locked: true };
     default:
       throw new Error(`Bridge mock chưa hỗ trợ type: ${type}`);
   }

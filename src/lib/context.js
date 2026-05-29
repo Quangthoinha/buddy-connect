@@ -15,7 +15,15 @@ export function getContext() {
       workspaceSlug: 'dev',
     };
   }
-  throw new Error('Không tìm thấy APP_CONTEXT — mini-app phải chạy trong Shell hoặc bật DEV mode');
+  // Return dummy object with isMissingContext flag instead of crashing the React application
+  return {
+    token: null,
+    workspaceId: '00000000-0000-0000-0000-000000000000',
+    userId: '00000000-0000-0000-0000-000000000000',
+    role: 'member',
+    workspaceSlug: 'mushy',
+    isMissingContext: true
+  };
 }
 
 export function isInShell() {
